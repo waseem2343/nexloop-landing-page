@@ -1,0 +1,6 @@
+{
+  "name": "Nexloop Landing Page",
+  "description": "A high-performance digital agency crafting premium experiences that redefine the intersection of technology and art featuring interactive glassmorphic panels and dynamic calculators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
