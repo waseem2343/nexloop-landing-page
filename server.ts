@@ -30,6 +30,124 @@ function getGeminiClient(): GoogleGenAI {
   return geminiClient;
 }
 
+const DYNAMIC_KNOWLEDGE_PATH = path.join(process.cwd(), "data", "learned_knowledge.json");
+
+interface LearnedKnowledge {
+  insights: string[];
+  lastUpdated: string;
+  totalQueriesProcessed: number;
+}
+
+// Ensure and load knowledge base
+async function loadLearnedKnowledge(): Promise<LearnedKnowledge> {
+  try {
+    const dataDir = path.join(process.cwd(), "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    
+    try {
+      const data = await fs.readFile(DYNAMIC_KNOWLEDGE_PATH, "utf8");
+      return JSON.parse(data);
+    } catch {
+      // Create initial knowledge base if file does not exist
+      const initial: LearnedKnowledge = {
+        insights: [
+          "Customers frequently prioritize combined Amazon & Noon regional setups with SPC Sharjah remote business licenses.",
+          "High-performance Shopify stores integrated with Middle Eastern secure checkout gateways yield significantly higher local conversions.",
+          "Direct procurement coordination inside UAE wholesale spots provides competitive advantages for local e-commerce startups."
+        ],
+        lastUpdated: new Date().toISOString(),
+        totalQueriesProcessed: 3
+      };
+      await fs.writeFile(DYNAMIC_KNOWLEDGE_PATH, JSON.stringify(initial, null, 2), "utf8");
+      return initial;
+    }
+  } catch (err) {
+    console.error("Error loading learned knowledge:", err);
+    return {
+      insights: [
+        "Customers expect seamless Shopify integrations with local Middle-Eastern payment channels.",
+        "SPC Sharjah licensing is popular due to ease of remote entity creation."
+      ],
+      lastUpdated: new Date().toISOString(),
+      totalQueriesProcessed: 2
+    };
+  }
+}
+
+// Function to digest the convo history, extract insights and update our cache
+async function runSelfLearningTask(convoHistory: { role: string; content: string }[], currentKnowledge: LearnedKnowledge) {
+  try {
+    const client = getGeminiClient();
+    
+    // Extract recent user queries
+    const userQueries = convoHistory.filter(m => m.role === "user" && m.content.trim().length > 3).map(m => m.content);
+    if (userQueries.length === 0) return;
+
+    const learningPrompt = `
+You are the Cognitive Cortex of Nexloop's AI engine. Analyze the following user queries from our latest client conversation:
+${JSON.stringify(userQueries, null, 2)}
+
+Current learned insights database:
+${JSON.stringify(currentKnowledge.insights, null, 2)}
+
+Extract any NEW, unique, and highly valuable client interests, pain points, desired combinations, or localized e-commerce/business needs discussed that are not clearly represented in the current database.
+Format your response as a JSON object containing a list called 'newInsights' of 1-2 new extremely concise, professional, high-value sentences (10-20 words each) representing the exact client pattern learned. If no new high-value pattern is present, return an empty list [].
+
+Format your response strictly as JSON with this schema:
+{
+  "newInsights": ["string"]
+}
+`;
+
+    const learningResp = await client.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: [{ role: "user", parts: [{ text: learningPrompt }] }],
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.4
+      }
+    });
+
+    const respText = learningResp.text || "{}";
+    let digested: { newInsights: string[] };
+    try {
+      let cleaned = respText.trim();
+      if (cleaned.startsWith("```")) {
+        cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+      }
+      digested = JSON.parse(cleaned);
+    } catch {
+      digested = { newInsights: [] };
+    }
+
+    if (digested && Array.isArray(digested.newInsights) && digested.newInsights.length > 0) {
+      // Add new insights, keep max 10 to keep memory neat and highly relevant
+      const updatedInsights = [
+        ...digested.newInsights.map(s => s.trim()).filter(s => s.length > 5 && !s.includes("{")),
+        ...currentKnowledge.insights
+      ].slice(0, 10);
+
+      const updatedKnowledge: LearnedKnowledge = {
+        insights: updatedInsights,
+        lastUpdated: new Date().toISOString(),
+        totalQueriesProcessed: currentKnowledge.totalQueriesProcessed + userQueries.length
+      };
+
+      await fs.writeFile(DYNAMIC_KNOWLEDGE_PATH, JSON.stringify(updatedKnowledge, null, 2), "utf8");
+      console.log("[Self-Learning Processed] Successfully updated cache with new parsed insights:", digested.newInsights);
+    } else {
+      const updatedKnowledge: LearnedKnowledge = {
+        ...currentKnowledge,
+        lastUpdated: new Date().toISOString(),
+        totalQueriesProcessed: currentKnowledge.totalQueriesProcessed + userQueries.length
+      };
+      await fs.writeFile(DYNAMIC_KNOWLEDGE_PATH, JSON.stringify(updatedKnowledge, null, 2), "utf8");
+    }
+  } catch (error) {
+    console.error("[Self-Learning Task Error]", error);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -50,6 +168,10 @@ async function startServer() {
       }
 
       const client = getGeminiClient();
+
+      // Load dynamic learned insights database to make our knowledge base stronger
+      const currentKnowledge = await loadLearnedKnowledge();
+      const insightsList = currentKnowledge.insights.map((ins, i) => `   - ${ins}`).join("\n");
 
       // Format current history into expected format for Gemini API
       const contents = messages.map((m: any) => ({
@@ -101,6 +223,10 @@ Core Customer Interaction Principles:
 
 5. ACTIVE STATE CONTROL:
 ${stateInstruction}
+
+6. SELF-LEARNED COGNITIVE INSIGHTS DATABASE:
+   We analyze recent interactions & customer queries dynamically to make our knowledge base increasingly competitive. Keep these learned client dynamics in mind and let them inform your recommendations gracefully:
+${insightsList}
 
 OUTPUT FORMAT:
 - You must comply with the target JSON schema containing 'reply' (string) and 'options' (array of strings).`;
@@ -157,6 +283,15 @@ OUTPUT FORMAT:
         };
       }
       
+      // Kick off background self-learning cognitive digest task to process lessons learned
+      if (messages.length >= 2) {
+        setTimeout(() => {
+          runSelfLearningTask(messages, currentKnowledge).catch(err => {
+            console.error("Background cognitive learning error:", err);
+          });
+        }, 300);
+      }
+
       return res.json({
         success: true,
         reply: parsedResponse.reply || "How can I assist you with Nexloop's services today?",
@@ -186,6 +321,24 @@ OUTPUT FORMAT:
           "💬 Chat on WhatsApp",
           "🔄 Start New Conversation"
         ]
+      });
+    }
+  });
+
+  // API Endpoint: Get current self-learned insights cache
+  app.get("/api/learned-knowledge", async (req, res) => {
+    try {
+      const knowledge = await loadLearnedKnowledge();
+      return res.json({
+        success: true,
+        insights: knowledge.insights || [],
+        totalQueriesProcessed: knowledge.totalQueriesProcessed || 0,
+        lastUpdated: knowledge.lastUpdated
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: "Unabled to load learned database: " + err.message
       });
     }
   });
