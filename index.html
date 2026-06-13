@@ -1,9 +1,32 @@
 <!doctype html>
 <html lang="en" class="scroll-smooth">
   <head>
+    <script>
+      // Safety wrapper to ensure window.fetch is writable even in sandboxed iframes
+      (function() {
+        try {
+          var originalFetch = window.fetch;
+          var currentFetch = originalFetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return currentFetch;
+            },
+            set: function(val) {
+              currentFetch = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) {
+          console.warn("Safety override for window.fetch setter was bypassed:", e);
+        }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nexloop | Digital Engineering the Future</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="https://lh3.googleusercontent.com/aida-public/AB6AXuDIRKMCUpoY6WdPttABZl3K4welW_sgwumbKc-Da22tw3h0CP4G1HGPiKaVd89OqQwu637z2li9fCSsMNzm3kQg89iexzNurzkQbst7YEkSzI491tr0K3M9Q-DyTgHv-0K2MAPIU3LgoFvht1gZq38ywoG6EgSjTo9poTd4f-XuTX31zWsSbC89h40BWFjc09RMxTKXMHUXeJLbYANZzXCnb1uR4hIDQRcYCf5zO6exl-ebHyY7Hl_AuzEDCcfYQ7mTMd8zxYmMMq0" />
     <!-- Fonts and Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
