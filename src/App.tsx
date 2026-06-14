@@ -26,7 +26,8 @@ import {
   Target,
   Smartphone,
   Palette,
-  Building2
+  Building2,
+  Phone
 } from 'lucide-react';
 import { IMAGES, PILLARS, METHODOLOGY_STEPS } from './data';
 import { StrategicPillar } from './types';
@@ -34,6 +35,7 @@ import SpotlightCard from './components/SpotlightCard';
 import ServiceModal from './components/ServiceModal';
 import ContactForm from './components/ContactForm';
 import AiMatrixBackground from './components/AiMatrixBackground';
+import AiChatbot from './components/AiChatbot';
 
 // Helper component to resolve specific icons dynamically
 const getPillarIcon = (iconType: string) => {
@@ -70,6 +72,7 @@ export default function App() {
   const [selectedMethodologyPhase, setSelectedMethodologyPhase] = useState<string>('01');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('All');
+  const [selectedService, setSelectedService] = useState<string>('Web Design & Development');
   
   // Real-time metrics
   const [currentTime, setCurrentTime] = useState('');
@@ -215,7 +218,16 @@ export default function App() {
           </div>
 
           {/* Contact Action */}
-          <div className="hidden md:block">
+          <div className="hidden md:flex items-center gap-6">
+            <a 
+              href="https://wa.me/971528131539"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-bold font-mono text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1.5"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              +971 52 813 1539
+            </a>
             <a 
               href="#contact" 
               className="px-6 py-2.5 bg-primary-container text-white text-xs font-bold uppercase tracking-widest rounded-full hover:scale-[1.05] active:scale-95 transition-all shadow-md shadow-primary-container/10 inline-block text-center cursor-pointer"
@@ -229,7 +241,7 @@ export default function App() {
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
             className="md:hidden text-[#e5e2e1] hover:text-white focus:outline-none p-1.5 bg-white/5 border border-white/5 rounded-full cursor-pointer"
           >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5 text-white" />}
           </button>
         </div>
 
@@ -262,6 +274,16 @@ export default function App() {
                 className="text-sm font-semibold py-2 text-on-surface-variant hover:text-white"
               >
                 Estimate Loop
+              </a>
+              <a 
+                href="https://wa.me/971528131539"
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-sm font-semibold py-2 text-emerald-400 hover:text-emerald-300 flex items-center justify-center gap-1.5"
+              >
+                <Phone className="w-4 h-4" />
+                +971 52 813 1539
               </a>
               <a 
                 href="#contact" 
@@ -573,7 +595,7 @@ export default function App() {
 
       {/* Contact Section: Ready to Dominate */}
       <section className="py-24 px-6 md:px-12 max-w-5xl mx-auto" id="contact">
-        <ContactForm />
+        <ContactForm selectedService={selectedService} setSelectedService={setSelectedService} />
       </section>
 
       {/* Footer Info blocks */}
@@ -616,11 +638,11 @@ export default function App() {
                 WhatsApp: +971 52 813 1539
               </a>
               <a 
-                href="mailto:support@nexlooplive.com" 
+                href="mailto:business@nexlooplive.com" 
                 className="hover:text-violet-400 font-mono transition-colors flex items-center gap-1.5"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
-                Email: support@nexlooplive.com
+                Email: business@nexlooplive.com
               </a>
               
               <div className="pt-3 border-t border-white/5 text-[11px] font-sans leading-relaxed text-outline-brand space-y-1">
@@ -664,7 +686,11 @@ export default function App() {
       <ServiceModal 
         pillar={activePillar}
         onClose={() => setActivePillar(null)}
+        setSelectedService={setSelectedService}
       />
+
+      {/* Floating AI Agent Consultation Chatbot */}
+      <AiChatbot />
 
     </div>
   );
