@@ -1,3 +1,4 @@
+import "dotenv/config";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
@@ -28,10 +29,10 @@ let localConversations = [
 ];
 
 let localKnowledge = [
-  { id: "K-001", title: "SPC Sharjah Freezone remote licensing setup", category: "Corporate Setup", keywords: "SPC, Sharjah, license, freezone", status: "Published" },
-  { id: "K-002", title: "Configuring Middle Eastern checkout gateways for Shopify", category: "Shopify Hub", keywords: "checkout, gateway, shopify, payment", status: "Published" },
-  { id: "K-003", title: "Amazon UAE Brand Registry compliance criteria Guide", category: "Amazon Support", keywords: "brand registry, amazon, trademark", status: "Draft" },
-  { id: "K-004", title: "Direct procurement pathways in UAE wholesale markets", category: "Local Sourcing", keywords: "procurement, sourcing, wholesale", status: "Published" }
+  { id: "K-001", title: "SPC Sharjah Freezone remote licensing setup", category: "Corporate Setup", keywords: "SPC, Sharjah, license, freezone", status: "Published", content: "Nexloop helps clients with UAE company formation, free zone license setup, mainland license guidance, visa assistance, business activity selection, document preparation, and bank account guidance in SPC Sharjah Freezone." },
+  { id: "K-002", title: "Configuring Middle Eastern checkout gateways for Shopify", category: "Shopify Hub", keywords: "checkout, gateway, shopify, payment", status: "Published", content: "Detailed setup instructions for integrating checkouts like PayTabs, Tap Payments, and Checkout.com with Shopify stores for GCC currencies." },
+  { id: "K-003", title: "Amazon UAE Brand Registry compliance criteria Guide", category: "Amazon Support", keywords: "brand registry, amazon, trademark", status: "Draft", content: "Compliance requirements for registering your brand on Amazon UAE, including the need for a registered trademark in the UAE or WIPO." },
+  { id: "K-004", title: "Direct procurement pathways in UAE wholesale markets", category: "Local Sourcing", keywords: "procurement, sourcing, wholesale", status: "Published", content: "Guides on acquiring genuine materials directly from markets such as Deira, Dragon Mart, and other wholesale outlets in Dubai." }
 ];
 
 let localAiSettings = {
@@ -75,6 +76,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
+        let recentActivityData: any[] = [];
+        if (supabase && isSupabaseHealthy) {
+          try {
+            const { data: dbLeads, error: errLeads } = await supabase.from("leads").select("name, service_interest, created_at").order("created_at", { ascending: false }).limit(5);
+            const { data: dbConvs, error: errConvs } = await supabase.from("conversations").select("message, created_at").order("created_at", { ascending: false }).limit(5);
+            
+            if (dbLeads && !errLeads) {
+              recentActivityData.push(...dbLeads.map(l => ({
+                type: "lead",
+                message: `New lead captured: ${l.name} (${l.service_interest || "Inquiry"})`,
+                date: l.created_at
+              })));
+            }
+            if (dbConvs && !errConvs) {
+              recentActivityData.push(...dbConvs.map(c => ({
+                type: "chat",
+                message: `Chat query: "${c.message.substring(0, 45)}..."`,
+                date: c.created_at
+              })));
+            }
+          } catch (er) {
+            console.warn("Error fetching recent activity from Supabase, falling back", er);
+          }
+        }
+        
+        if (recentActivityData.length === 0) {
+          recentActivityData = [
+            ...localLeads.map(l => ({ type: "lead", message: `New lead captured: ${l.name} (${l.service_interest})`, date: l.created_at })),
+            ...localConversations.map(c => ({ type: "chat", message: `Chat query: "${c.message.substring(0, 45)}..."`, date: c.created_at }))
+          ];
+        }
+
         return res.status(200).json({
           success: true,
           stats: {
@@ -85,10 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             supabaseConnected: isSupabaseConfigured,
             databaseHealthy: isSupabaseHealthy
           },
-          recentActivity: [
-            ...localLeads.map(l => ({ type: "lead", message: `New lead captured: ${l.name} (${l.service_interest})`, date: l.created_at })),
-            ...localConversations.map(c => ({ type: "chat", message: `Chat query: "${c.message.substring(0, 45)}..."`, date: c.created_at }))
-          ].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 6)
+          recentActivity: recentActivityData.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 6)
         });
       }
 
@@ -98,11 +128,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
               const { data, error } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
               if (error) throw error;
-              if (data && data.length > 0) {
-                return res.status(200).json({ success: true, data });
-              }
-            } catch (err) {
-              console.warn("Supabase leads load failed, using local/demo leads:", err);
+              return res.status(200).json({ success: true, data: data || [] });
+            } catch (err: any) {
+              console.warn("Supabase leads load failed (falling back to memory):", err.message || err);
             }
           }
           return res.status(200).json({ success: true, data: localLeads });
@@ -128,11 +156,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { id, ...updatedParts } = req.body;
           if (supabase) {
             try {
-              const { data, error } = await supabase.from("leads").update(updatedParts).eq("id", id).select();
+              const parsedId = /^\d+$/.test(String(id)) ? parseInt(String(id), 10) : id;
+              const { data, error } = await supabase.from("leads").update(updatedParts).eq("id", parsedId).select();
               if (error) throw error;
               return res.status(200).json({ success: true, data: data[0] });
-            } catch (err) {
-              console.warn("Supabase update lead failed, updating memory:", err);
+            } catch (err: any) {
+              console.warn("Supabase update lead failed (falling back to memory):", err.message || err);
             }
           }
           localLeads = localLeads.map(l => l.id === id ? { ...l, ...updatedParts } : l);
@@ -143,11 +172,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const id = req.query.id as string;
           if (supabase) {
             try {
-              const { error } = await supabase.from("leads").delete().eq("id", id);
+              const parsedId = /^\d+$/.test(id) ? parseInt(id, 10) : id;
+              const { error } = await supabase.from("leads").delete().eq("id", parsedId);
               if (error) throw error;
               return res.status(200).json({ success: true, id });
-            } catch (err) {
-              console.warn("Supabase delete lead failed, deleting from memory:", err);
+            } catch (err: any) {
+              console.warn("Supabase delete lead failed (falling back to memory):", err.message || err);
             }
           }
           localLeads = localLeads.filter(l => l.id !== id);
@@ -162,11 +192,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
               const { data, error } = await supabase.from("conversations").select("*").order("created_at", { ascending: false });
               if (error) throw error;
-              if (data && data.length > 0) {
-                return res.status(200).json({ success: true, data });
-              }
-            } catch (err) {
-              console.warn("Supabase conversations load failed, using local/demo conversations:", err);
+              return res.status(200).json({ success: true, data: data || [] });
+            } catch (err: any) {
+              console.warn("Supabase conversations load failed (falling back to memory):", err.message || err);
             }
           }
           return res.status(200).json({ success: true, data: localConversations });
@@ -179,8 +207,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               const { error } = await supabase.from("conversations").delete().eq("id", id);
               if (error) throw error;
               return res.status(200).json({ success: true, id });
-            } catch (err) {
-              console.warn("Supabase delete conversation failed, deleting from memory:", err);
+            } catch (err: any) {
+              console.warn("Supabase delete conversation failed (falling back to memory):", err.message || err);
             }
           }
           localConversations = localConversations.filter(c => c.id !== id);
@@ -195,11 +223,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
               const { data, error } = await supabase.from("knowledge_base").select("*").order("id", { ascending: true });
               if (error) throw error;
-              if (data && data.length > 0) {
-                return res.status(200).json({ success: true, data });
-              }
-            } catch (err) {
-              console.warn("Supabase knowledge_base load failed, using local/demo knowledge:", err);
+              return res.status(200).json({ success: true, data: data || [] });
+            } catch (err: any) {
+              console.warn("Supabase knowledge_base load failed (falling back to memory):", err.message || err);
             }
           }
           return res.status(200).json({ success: true, data: localKnowledge });
@@ -225,11 +251,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { id, ...updatedParts } = req.body;
           if (supabase) {
             try {
-              const { data, error } = await supabase.from("knowledge_base").update(updatedParts).eq("id", id).select();
+              const parsedId = /^\d+$/.test(String(id)) ? parseInt(String(id), 10) : id;
+              const { data, error } = await supabase.from("knowledge_base").update(updatedParts).eq("id", parsedId).select();
               if (error) throw error;
               return res.status(200).json({ success: true, data: data[0] });
-            } catch (err) {
-              console.warn("Supabase update article failed, updating memory:", err);
+            } catch (err: any) {
+              console.warn("Supabase update article failed (falling back to memory):", err.message || err);
             }
           }
           localKnowledge = localKnowledge.map(k => k.id === id ? { ...k, ...updatedParts } : k);
@@ -240,11 +267,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const id = req.query.id as string;
           if (supabase) {
             try {
-              const { error } = await supabase.from("knowledge_base").delete().eq("id", id);
+              const parsedId = /^\d+$/.test(id) ? parseInt(id, 10) : id;
+              const { error } = await supabase.from("knowledge_base").delete().eq("id", parsedId);
               if (error) throw error;
               return res.status(200).json({ success: true, id });
-            } catch (err) {
-              console.warn("Supabase delete article failed, deleting from memory:", err);
+            } catch (err: any) {
+              console.warn("Supabase delete article failed (falling back to memory):", err.message || err);
             }
           }
           localKnowledge = localKnowledge.filter(k => k.id !== id);

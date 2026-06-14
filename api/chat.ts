@@ -1,3 +1,4 @@
+import "dotenv/config";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
@@ -174,6 +175,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const currentKnowledge = await loadLearnedKnowledge();
     const insightsList = currentKnowledge.insights.map((ins, i) => `   - ${ins}`).join("\n");
 
+    // Load admin training articles from Supabase knowledge_base dynamically
+    let supabaseArticlesText = "";
+    if (supabase) {
+      try {
+        const { data: dbArticles, error: dbArticlesErr } = await supabase
+          .from("knowledge_base")
+          .select("title, category, keywords, content")
+          .eq("status", "Published");
+          
+        if (!dbArticlesErr && dbArticles && dbArticles.length > 0) {
+          supabaseArticlesText = dbArticles.map((art: any, index: number) => {
+            return `ARTICLE ${index + 1}:
+Origin: ${art.category || "General"}
+Title: ${art.title}
+Keyphrase Trigger Terms: ${art.keywords || ""}
+Verified Content Details: ${art.content || ""}`;
+          }).join("\n\n");
+        }
+      } catch (err: any) {
+        console.warn("Could not query Supabase knowledge_base for chat prompt (falling back):", err.message || err);
+      }
+    }
+
+    let dynamicKnowledgeSection = "";
+    if (supabaseArticlesText) {
+      dynamicKnowledgeSection = `
+
+7. VERIFIED CORPORATE KNOWLEDGE BASE (Strictly follow this training info for matches):
+${supabaseArticlesText}`;
+    }
+
     // Format current history into expected format for Gemini API
     const contents = messages.map((m: any) => ({
       role: m.role === "user" ? "user" : "model",
@@ -227,7 +259,7 @@ ${stateInstruction}
 
 6. SELF-LEARNED COGNITIVE INSIGHTS DATABASE:
    We analyze recent interactions & customer queries dynamically to make our knowledge base increasingly competitive. Keep these learned client dynamics in mind and let them inform your recommendations gracefully:
-${insightsList}
+${insightsList}${dynamicKnowledgeSection}
 
 OUTPUT FORMAT:
 - You must comply with the target JSON schema containing 'reply' (string), 'options' (array of strings), and optionally a 'lead' object if any contact data or service interest is mentioned in the history.`;
