@@ -9,6 +9,20 @@ import fs from "fs/promises";
 import nodemailer from "nodemailer";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import { createClient } from "@supabase/supabase-js";
+
+// Initialize Supabase Client dynamically
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const isSupabaseConfigured =
+  supabaseUrl &&
+  supabaseAnonKey &&
+  supabaseUrl !== "https://your-supabase-project.supabase.co" &&
+  supabaseUrl.trim().length > 0;
+
+const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 // Lazy Gemini Client Initialization Helper
 let geminiClient: GoogleGenAI | null = null;
@@ -229,7 +243,7 @@ ${stateInstruction}
 ${insightsList}
 
 OUTPUT FORMAT:
-- You must comply with the target JSON schema containing 'reply' (string) and 'options' (array of strings).`;
+- You must comply with the target JSON schema containing 'reply' (string), 'options' (array of strings), and optionally a 'lead' object if any contact data or service interest is mentioned in the history.`;
 
       const response = await client.models.generateContent({
         model: "gemini-3.5-flash",
@@ -249,6 +263,27 @@ OUTPUT FORMAT:
                 type: Type.ARRAY,
                 items: { type: Type.STRING },
                 description: "An array of 2 to 4 extremely short, direct interactive button options (maximum 3-4 words each) representing answers, preferred selections, or pathways corresponding to the question you asked. If you welcomed them, offer our 5 core services."
+              },
+              lead: {
+                type: Type.OBJECT,
+                properties: {
+                  name: {
+                    type: Type.STRING,
+                    description: "Extract the client's name from conversation history if provided, otherwise empty string"
+                  },
+                  email: {
+                    type: Type.STRING,
+                    description: "Extract the client's email address if they provided it, otherwise empty string"
+                  },
+                  phone: {
+                    type: Type.STRING,
+                    description: "Extract the client's phone or WhatsApp number if they provided it, otherwise empty string"
+                  },
+                  service_interest: {
+                    type: Type.STRING,
+                    description: "Core service line they are interested in (e.g. Amazon & Noon Support, Shopify, Ads, Remote License, Local UAE sourcing) if identifiable based on messages, otherwise empty string"
+                  }
+                }
               }
             },
             required: ["reply", "options"]
@@ -257,7 +292,17 @@ OUTPUT FORMAT:
       });
 
       const replyText = response.text || "{}";
-      let parsedResponse: { reply: string; options: string[] };
+      let parsedResponse: {
+        reply: string;
+        options: string[];
+        lead?: {
+          name?: string;
+          email?: string;
+          phone?: string;
+          service_interest?: string;
+        };
+      };
+
       try {
         let cleanedText = replyText.trim();
         // Strip markdown backticks block if output by mistake or fallback
@@ -283,6 +328,94 @@ OUTPUT FORMAT:
         };
       }
       
+      // Capture the latest user message
+      const lastUserMessage = messages.filter((m: any) => m.role === "user").pop()?.content || "";
+
+      // 1. Core database operations: insert into conversations
+      if (supabase) {
+        try {
+          const { error: insertError } = await supabase.from("conversations").insert([{
+            source: "Website Chat",
+            sender: "User",
+            message: lastUserMessage,
+            ai_reply: parsedResponse.reply || ""
+          }]);
+
+          if (insertError) {
+            console.error("Supabase insert failed", insertError);
+          } else {
+            console.log("Conversation saved successfully in server backend");
+          }
+        } catch (dbErr) {
+          console.error("Supabase insert failed", dbErr);
+        }
+
+        // 2. Lead extraction fallback + creation/updates
+        try {
+          // Regex-based manual fallback helpers for robust captures
+          const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+          const matchEmail = lastUserMessage.match(emailRegex);
+          const manualEmail = matchEmail ? matchEmail[0] : "";
+
+          const phoneRegex = /\+?[0-9]{8,15}/;
+          const matchPhone = lastUserMessage.match(phoneRegex);
+          const manualPhone = matchPhone ? matchPhone[0] : "";
+
+          const extractedName = parsedResponse.lead?.name?.trim() || "";
+          const extractedEmail = parsedResponse.lead?.email?.trim() || manualEmail;
+          const extractedPhone = parsedResponse.lead?.phone?.trim() || manualPhone;
+          const extractedInterest = parsedResponse.lead?.service_interest?.trim() || "";
+
+          if (extractedName || extractedEmail || extractedPhone || extractedInterest) {
+            let existingLead: any = null;
+
+            if (extractedEmail) {
+              const { data } = await supabase.from("leads").select("*").eq("email", extractedEmail).limit(1);
+              if (data && data.length > 0) existingLead = data[0];
+            }
+
+            if (!existingLead && extractedPhone) {
+              const { data } = await supabase.from("leads").select("*").eq("phone", extractedPhone).limit(1);
+              if (data && data.length > 0) existingLead = data[0];
+            }
+
+            if (existingLead) {
+              // Update empty/missing fields on existing lead
+              const updateProps: any = {};
+              if (extractedName && !existingLead.name) updateProps.name = extractedName;
+              if (extractedEmail && !existingLead.email) updateProps.email = extractedEmail;
+              if (extractedPhone && !existingLead.phone) updateProps.phone = extractedPhone;
+              if (extractedInterest && !existingLead.service_interest) {
+                updateProps.service_interest = extractedInterest;
+              }
+
+              if (Object.keys(updateProps).length > 0) {
+                const { error: updateError } = await supabase
+                  .from("leads")
+                  .update(updateProps)
+                  .eq("id", existingLead.id);
+                if (updateError) {
+                  console.error("[Supabase Leads Update Error]", updateError);
+                }
+              }
+            } else {
+              // Create a brand new lead securely
+              const { error: leadInsertError } = await supabase.from("leads").insert([{
+                name: extractedName || null,
+                email: extractedEmail || null,
+                phone: extractedPhone || null,
+                service_interest: extractedInterest || null
+              }]);
+              if (leadInsertError) {
+                console.error("[Supabase Leads Insert Error]", leadInsertError);
+              }
+            }
+          }
+        } catch (leadErr) {
+          console.error("[Supabase Leads Lead Process Exception]", leadErr);
+        }
+      }
+
       // Kick off background self-learning cognitive digest task to process lessons learned
       if (messages.length >= 2) {
         setTimeout(() => {
