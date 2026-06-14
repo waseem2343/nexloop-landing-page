@@ -4,13 +4,23 @@
  */
 
 import { useState, FormEvent, useEffect } from 'react';
-import { Sparkles, Terminal, Copy, Shield, FileCheck, RefreshCw, Send, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Terminal, Copy, Shield, FileCheck, RefreshCw, Send, CheckCircle2, Loader2, Mail, AlertCircle } from 'lucide-react';
 
-export default function ContactForm() {
+interface ContactFormProps {
+  selectedService?: string;
+  setSelectedService?: (val: string) => void;
+}
+
+export default function ContactForm({ selectedService, setSelectedService }: ContactFormProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [service, setService] = useState('Web Design & Development');
+  const [countryCode, setCountryCode] = useState('+971');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [localService, setLocalService] = useState('Web Design & Development');
+  const service = selectedService !== undefined ? selectedService : localService;
+  const setService = setSelectedService !== undefined ? setSelectedService : setLocalService;
   const [message, setMessage] = useState('');
+  const [autoDispatchedId, setAutoDispatchedId] = useState<string | null>(null);
 
   // Timeline / Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -26,6 +36,16 @@ export default function ContactForm() {
     estCostAed: string;
     architectureType: string;
     phases: string[];
+  } | null>(null);
+
+  // Background Web Submission State
+  const [apiStatus, setApiStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [apiResponse, setApiResponse] = useState<{
+    success: boolean;
+    loggedLocally?: boolean;
+    emailSent?: boolean;
+    warning?: string;
+    proposalId?: string;
   } | null>(null);
 
   const steps = [
@@ -45,6 +65,7 @@ export default function ContactForm() {
       `CLIENT DETAILS:\n` +
       `- Name: ${fullName}\n` +
       `- Email: ${email}\n` +
+      `- Phone Number: ${countryCode} ${phoneNumber}\n` +
       `- Service of Interest: ${service}\n` +
       `- Message: ${message || 'No additional message.'}\n\n` +
       `PROPOSAL DATA:\n` +
@@ -59,14 +80,58 @@ export default function ContactForm() {
       `Best regards,\n` +
       `${fullName}`
     );
-    const mailtoUrl = `mailto:support@nexlooplive.com?subject=${subject}&body=${body}`;
-    window.location.href = mailtoUrl;
+    const mailtoUrl = `mailto:business@nexlooplive.com?subject=${subject}&body=${body}`;
+    window.open(mailtoUrl, '_blank');
   };
+
+  useEffect(() => {
+    if (submissionComplete && proposalData && autoDispatchedId !== proposalData.id) {
+      setAutoDispatchedId(proposalData.id);
+      setApiStatus('sending');
+
+      // Directly dispatch parameters through the website backend
+      const payload = {
+        fullName,
+        email,
+        countryCode,
+        phoneNumber,
+        service,
+        message,
+        proposalData
+      };
+
+      fetch('/api/send-proposal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('API server returned error code');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data.success) {
+          setApiStatus('success');
+          setApiResponse(data);
+        } else {
+          setApiStatus('error');
+        }
+      })
+      .catch((err) => {
+        console.error('Error submitting web proposal:', err);
+        setApiStatus('error');
+      });
+    }
+  }, [submissionComplete, proposalData, autoDispatchedId, service, fullName, email, countryCode, phoneNumber, message]);
 
   const handleFormSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!fullName || !email) {
-      alert('Please fill out Name and Email to process the Project Loop.');
+    if (!fullName || !email || !phoneNumber) {
+      alert('Please fill out Name, Email, and Phone Number to process the Project Loop.');
       return;
     }
 
@@ -203,9 +268,13 @@ export default function ContactForm() {
   const resetForm = () => {
     setFullName('');
     setEmail('');
+    setPhoneNumber('');
     setMessage('');
     setSubmissionComplete(false);
     setProposalData(null);
+    setApiStatus('idle');
+    setApiResponse(null);
+    setAutoDispatchedId(null);
   };
 
   return (
@@ -227,7 +296,7 @@ export default function ContactForm() {
           </div>
 
           <form className="space-y-6 relative z-10" onSubmit={handleFormSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <label className="font-sans text-xs font-bold text-outline-brand px-1 uppercase tracking-wider">Full Name</label>
                 <input
@@ -249,6 +318,44 @@ export default function ContactForm() {
                   className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none transition-all text-white text-sm"
                   placeholder="john@company.com"
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="font-sans text-xs font-bold text-outline-brand px-1 uppercase tracking-wider">Mobile Phone Number</label>
+                <div className="flex gap-2">
+                  <div className="relative shrink-0">
+                    <select
+                      value={countryCode}
+                      onChange={(e) => setCountryCode(e.target.value)}
+                      className="bg-[#111111] border border-white/10 rounded-2xl pl-4 pr-9 py-4 focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none transition-all text-white text-xs cursor-pointer appearance-none min-w-[115px]"
+                    >
+                      <option value="+971" className="bg-[#111111] text-white">UAE (+971)</option>
+                      <option value="+966" className="bg-[#111111] text-white">KSA (+966)</option>
+                      <option value="+974" className="bg-[#111111] text-white">Qatar (+974)</option>
+                      <option value="+968" className="bg-[#111111] text-white">Oman (+968)</option>
+                      <option value="+965" className="bg-[#111111] text-white">Kuwait (+965)</option>
+                      <option value="+973" className="bg-[#111111] text-white">Bahrain (+973)</option>
+                      <option value="+44" className="bg-[#111111] text-white">UK (+44)</option>
+                      <option value="+1" className="bg-[#111111] text-white">US (+1)</option>
+                      <option value="+92" className="bg-[#111111] text-white">PK (+92)</option>
+                      <option value="+91" className="bg-[#111111] text-white">IN (+91)</option>
+                      <option value="+65" className="bg-[#111111] text-white">SG (+65)</option>
+                      <option value="+61" className="bg-[#111111] text-white">AU (+61)</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-zinc-500">
+                      <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <input
+                    required
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    className="flex-1 min-w-0 bg-[#070708]/40 border border-white/10 rounded-2xl px-5 py-4 focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none transition-all text-white text-sm"
+                    placeholder="50 123 4567"
+                  />
+                </div>
               </div>
             </div>
 
@@ -312,13 +419,13 @@ export default function ContactForm() {
                 </a>
                 <span className="text-white/10 hidden sm:inline">|</span>
                 <a 
-                  href="mailto:support@nexlooplive.com" 
+                  href="mailto:business@nexlooplive.com" 
                   className="inline-flex items-center gap-2 text-violet-400 hover:text-violet-300 hover:underline transition-all"
                 >
                   <svg className="w-4 h-4 fill-none stroke-current stroke-[2] text-violet-400 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                   </svg>
-                  support@nexlooplive.com
+                  business@nexlooplive.com
                 </a>
               </div>
               <div className="text-zinc-500 text-[11px] mt-2 flex items-center justify-center gap-1.5 flex-wrap">
@@ -382,109 +489,28 @@ export default function ContactForm() {
           </div>
         </div>
       ) : (
-        /* Personalized Client Proposal Summary */
-        <div className="relative z-10" id="proposal-box">
-          <div className="flex justify-between items-start mb-8">
-            <div className="flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span className="text-xs text-emerald-400 font-mono font-bold uppercase tracking-widest">
-                Custom Blueprint Synthesized
-              </span>
+        /* Minimalist Success Window reflecting Direct Submission */
+        <div className="relative z-10 flex flex-col items-center justify-center py-16 md:py-24 text-center animate-fade-in" id="success-popup-box">
+          
+          {/* Animated Ambient Glow */}
+          <div className="absolute inset-0 bg-primary-container/5 rounded-full blur-[100px] pointer-events-none"></div>
+
+          {/* Core Interactive Success Circle */}
+          <div className="relative mb-8">
+            <div className="w-20 h-20 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center animate-bounce">
+              <CheckCircle2 className="w-10 h-10 text-emerald-400 stroke-[2.5]" />
             </div>
-            <button
-              onClick={resetForm}
-              className="px-4 py-2 bg-white/5 border border-white/10 text-xs text-on-surface hover:text-white rounded-full transition-all cursor-pointer"
-            >
-              Reset / Configure Again
-            </button>
+            <div className="absolute -inset-2 bg-emerald-500/20 rounded-full -z-10 blur-slate opacity-50"></div>
           </div>
 
-          <div className="text-center md:text-left mb-6">
-            <h3 className="font-display text-2xl md:text-3xl font-bold text-white mb-2">
-              Hello, {fullName}!
+          <div className="max-w-xl px-4">
+            <h3 className="font-display text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight leading-tight">
+              Thank You!
             </h3>
-            <p className="text-xs text-on-surface-variant max-w-lg mb-6 leading-relaxed">
-              Based on your brand configuration for <span className="text-white font-bold">{service}</span>, our engine has simulated your tailored execution specifications:
+            
+            <p className="text-zinc-300 text-base md:text-lg leading-relaxed">
+              Thanks, <span className="text-emerald-450 text-emerald-400 font-bold">{fullName}</span>. Your request has been successfully submitted. We will contact you soon.
             </p>
-          </div>
-
-          {/* Proposal Summary Card */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="bg-black/50 p-5 rounded-2xl border border-white/5 text-center md:text-left flex flex-col justify-between">
-              <span className="text-[10px] text-outline-brand uppercase tracking-wider">Synthesized Core ID</span>
-              <div className="text-lg font-bold font-mono text-primary-brand mt-1">{proposalData?.id}</div>
-              <span className="text-[10px] text-on-surface-variant mt-2">Unique workspace digest references</span>
-            </div>
-
-            <div className="bg-black/50 p-5 rounded-2xl border border-white/5 text-center md:text-left flex flex-col justify-between">
-              <span className="text-[10px] text-outline-brand uppercase tracking-wider">Estimated Delivery</span>
-              <div className="text-lg font-bold font-display text-white mt-1">{proposalData?.timeline}</div>
-              <span className="text-[10px] text-on-surface-variant mt-2">Sprint-paced milestone checkpoints</span>
-            </div>
-
-            <div className="bg-black/50 p-5 rounded-2xl border border-white/5 text-center md:text-left flex flex-col justify-between">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-zinc-400 uppercase tracking-wider block">Cost Allocation</span>
-                <div className="flex bg-white/5 rounded-full p-0.5 border border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => setProposalCurrency('USD')}
-                    className={`text-[8px] px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer ${
-                      proposalCurrency === 'USD' ? 'bg-primary-container text-white shadow-sm' : 'text-zinc-500 hover:text-white'
-                    }`}
-                  >
-                    USD
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProposalCurrency('AED')}
-                    className={`text-[8px] px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer ${
-                      proposalCurrency === 'AED' ? 'bg-primary-container text-white shadow-sm' : 'text-zinc-500 hover:text-white'
-                    }`}
-                  >
-                    AED
-                  </button>
-                </div>
-              </div>
-              <div className="text-lg font-bold font-mono text-emerald-400 mt-1">
-                {proposalCurrency === 'USD' ? proposalData?.estCostUsd : proposalData?.estCostAed}
-              </div>
-              <span className="text-[10px] text-on-surface-variant mt-2">Fully transparent resource quotas</span>
-            </div>
-          </div>
-
-          {/* Detailed Roadmap Steps */}
-          <div className="bg-white/5 p-6 md:p-8 rounded-3xl border border-white/5 mb-8">
-            <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-secondary-container" />
-              Tailored Execution Phases
-            </h4>
-            <div className="space-y-4">
-              {proposalData?.phases.map((phase, i) => (
-                <div key={i} className="flex gap-4 items-start pb-3 border-b border-white/5 last:border-b-0 last:pb-0">
-                  <span className="text-xs font-mono text-primary-brand font-bold bg-white/5 border border-white/10 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0">
-                    {i + 1}
-                  </span>
-                  <div>
-                    <h5 className="text-xs font-semibold text-white leading-normal">{phase}</h5>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Call-to-action Confirmation box */}
-          <div className="bg-gradient-to-r from-primary-container/20 to-secondary-container/10 p-6 rounded-3xl border border-primary-container/20 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="text-center md:text-left">
-              <h5 className="text-sm font-bold text-white mb-1">Proposal request logged for support@nexlooplive.com</h5>
-              <p className="text-[11px] text-on-surface-variant">Your checklist is ready. Click the claim button to securely dispatch it via your mail client.</p>
-            </div>
-            <button
-              onClick={handleClaimBlueprint}
-              className="px-6 py-3 bg-primary-container text-white text-xs font-bold font-label-md rounded-full shadow-lg shadow-primary-container/20 hover:scale-[1.02] transition-all cursor-pointer whitespace-nowrap"
-            >
-              Verify & Claim Blueprint
-            </button>
           </div>
         </div>
       )}

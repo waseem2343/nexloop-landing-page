@@ -18,7 +18,7 @@ interface Particle {
 export default function AiMatrixBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [mouse, setMouse] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
+  const mouseRef = useRef<{ x: number | null; y: number | null }>({ x: null, y: null });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -81,14 +81,14 @@ export default function AiMatrixBackground() {
     // Mouse Tracking relative to canvas
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
-      setMouse({
+      mouseRef.current = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
-      });
+      };
     };
 
     const handleMouseLeave = () => {
-      setMouse({ x: null, y: null });
+      mouseRef.current = { x: null, y: null };
     };
 
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
@@ -100,6 +100,8 @@ export default function AiMatrixBackground() {
       const h = canvas.height;
 
       ctx.clearRect(0, 0, w, h);
+
+      const mouse = mouseRef.current;
 
       // Draw Connection lines first (background)
       for (let i = 0; i < particles.length; i++) {
@@ -188,7 +190,7 @@ export default function AiMatrixBackground() {
       window.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [mouse.x, mouse.y]);
+  }, []);
 
   return (
     <div ref={containerRef} className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none z-0">
