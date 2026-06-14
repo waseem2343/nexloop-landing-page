@@ -20,6 +20,7 @@ interface Article {
   category: string;
   keywords: string;
   status: string;
+  content: string;
 }
 
 export default function AdminKnowledgeBase() {
@@ -38,7 +39,8 @@ export default function AdminKnowledgeBase() {
     title: '',
     category: 'Corporate Setup',
     keywords: '',
-    status: 'Published'
+    status: 'Published',
+    content: ''
   });
 
   const loadArticles = async () => {
@@ -56,11 +58,11 @@ export default function AdminKnowledgeBase() {
       if (cached) {
         setArticles(JSON.parse(cached));
       } else {
-        const fallbacks = [
-          { id: "K-001", title: "SPC Sharjah Freezone remote licensing setup", category: "Corporate Setup", keywords: "SPC, Sharjah, license, freezone", status: "Published" },
-          { id: "K-002", title: "Configuring Middle Eastern checkout gateways for Shopify", category: "Shopify Hub", keywords: "checkout, gateway, shopify, payment", status: "Published" },
-          { id: "K-003", title: "Amazon UAE Brand Registry compliance criteria Guide", category: "Amazon Support", keywords: "brand registry, amazon, trademark", status: "Draft" },
-          { id: "K-004", title: "Direct procurement pathways in UAE wholesale markets", category: "Local Sourcing", keywords: "procurement, sourcing, wholesale", status: "Published" }
+        const fallbacks: Article[] = [
+          { id: "K-001", title: "SPC Sharjah Freezone remote licensing setup", category: "Corporate Setup", keywords: "SPC, Sharjah, license, freezone", status: "Published", content: "Nexloop helps clients with UAE company formation, free zone license setup, mainland license guidance, visa assistance, business activity selection, document preparation, and bank account guidance in SPC Sharjah Freezone." },
+          { id: "K-002", title: "Configuring Middle Eastern checkout gateways for Shopify", category: "Shopify Hub", keywords: "checkout, gateway, shopify, payment", status: "Published", content: "Detailed setup instructions for integrating checkouts like PayTabs, Tap Payments, and Checkout.com with Shopify stores for GCC currencies." },
+          { id: "K-003", title: "Amazon UAE Brand Registry compliance criteria Guide", category: "Amazon Support", keywords: "brand registry, amazon, trademark", status: "Draft", content: "Compliance requirements for registering your brand on Amazon UAE, including the need for a registered trademark in the UAE or WIPO." },
+          { id: "K-004", title: "Direct procurement pathways in UAE wholesale markets", category: "Local Sourcing", keywords: "procurement, sourcing, wholesale", status: "Published", content: "Guides on acquiring genuine materials directly from markets such as Deira, Dragon Mart, and other wholesale outlets in Dubai." }
         ];
         setArticles(fallbacks);
         localStorage.setItem('nexloop_knowledge', JSON.stringify(fallbacks));
@@ -109,7 +111,8 @@ export default function AdminKnowledgeBase() {
         title: '',
         category: 'Corporate Setup',
         keywords: '',
-        status: 'Published'
+        status: 'Published',
+        content: ''
       });
     }
   };
@@ -260,6 +263,11 @@ export default function AdminKnowledgeBase() {
                       <div>
                         <div className="font-bold text-white group-hover:text-secondary-container transition-colors leading-snug">{article.title}</div>
                         <div className="text-[10px] font-mono text-outline-brand mt-0.5">UID: {article.id}</div>
+                        {article.content && (
+                          <div className="text-[11px] text-[#8c90a1] mt-1 line-clamp-2 max-w-sm font-normal">
+                            &ldquo;{article.content}&rdquo;
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -373,6 +381,18 @@ export default function AdminKnowledgeBase() {
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-outline-brand uppercase tracking-wider font-bold">Knowledge Content</label>
+                <textarea 
+                  required
+                  rows={4}
+                  placeholder="e.g. Nexloop helps clients with UAE company formation, free zone license setup, mainland license guidance, visa assistance, business activity selection, document preparation, and bank account guidance."
+                  value={formFields.content}
+                  onChange={(e) => setFormFields({ ...formFields, content: e.target.value })}
+                  className="w-full px-4 py-3 rounded-2xl bg-[#1c1b1b] border border-white/5 focus:border-secondary-container/35 text-xs text-white focus:outline-none resize-none font-sans"
+                />
+              </div>
+
             </div>
             <div className="p-5 bg-[#111111]/80 border-t border-white/5 flex justify-end gap-3 rounded-b-[32px]">
               <button 
@@ -455,6 +475,18 @@ export default function AdminKnowledgeBase() {
                   value={editingArticle.keywords}
                   onChange={(e) => setEditingArticle({ ...editingArticle, keywords: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-[#1c1b1b] border border-white/5 focus:border-secondary-container/35 text-xs text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-outline-brand uppercase tracking-wider font-bold">Knowledge Content</label>
+                <textarea 
+                  required
+                  rows={4}
+                  placeholder="Enter full training information for the AI..."
+                  value={editingArticle.content || ''}
+                  onChange={(e) => setEditingArticle({ ...editingArticle, content: e.target.value })}
+                  className="w-full px-4 py-3 rounded-2xl bg-[#1c1b1b] border border-white/5 focus:border-secondary-container/35 text-xs text-white focus:outline-none resize-none font-sans"
                 />
               </div>
 
