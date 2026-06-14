@@ -327,10 +327,12 @@ OUTPUT FORMAT:
         }]);
 
         if (insertError) {
-          console.error("[Supabase Conversations Insert Error]", insertError);
+          console.error("Supabase insert failed", insertError);
+        } else {
+          console.log("Conversation saved successfully");
         }
       } catch (dbErr) {
-        console.error("[Supabase Conversations Exception]", dbErr);
+        console.error("Supabase insert failed", dbErr);
       }
 
       // 2. Lead extraction fallback + creation/updates
