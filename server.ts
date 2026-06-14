@@ -526,6 +526,23 @@ OUTPUT FORMAT:
     }
   });
 
+  // API Endpoint: Dynamic Express Router for CRM Admin Panel
+  app.all("/api/admin/:action?", async (req, res) => {
+    try {
+      const adminHandler = (await import("./api/admin.js")).default;
+      const vercelReq = req as any;
+      const vercelRes = res as any;
+      if (!vercelReq.query) vercelReq.query = {};
+      if (req.params.action) {
+        vercelReq.query.action = req.params.action;
+      }
+      return adminHandler(vercelReq, vercelRes);
+    } catch (err: any) {
+      console.error("[Express Admin Gateway Error]", err);
+      return res.status(500).json({ success: false, error: "Admin API gateway error: " + err.message });
+    }
+  });
+
   // Serve static files / Vite middleware
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
