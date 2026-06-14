@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { 
   ArrowRight, 
   Sparkles, 
@@ -37,6 +38,15 @@ import ContactForm from './components/ContactForm';
 import AiMatrixBackground from './components/AiMatrixBackground';
 import AiChatbot from './components/AiChatbot';
 
+// CRM Admin Pages
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminLeads from './pages/admin/AdminLeads';
+import AdminConversations from './pages/admin/AdminConversations';
+import AdminKnowledgeBase from './pages/admin/AdminKnowledgeBase';
+import AdminSettings from './pages/admin/AdminSettings';
+import AdminLogin from './pages/admin/AdminLogin';
+
 // Helper component to resolve specific icons dynamically
 const getPillarIcon = (iconType: string) => {
   const iconProps = { className: "w-6 h-6 text-primary-brand group-hover:scale-105 transition-transform duration-300" };
@@ -66,7 +76,7 @@ const getPillarIcon = (iconType: string) => {
   }
 };
 
-export default function App() {
+export function PublicWebsite() {
   const [scrollY, setScrollY] = useState(0);
   const [activePillar, setActivePillar] = useState<StrategicPillar | null>(null);
   const [selectedMethodologyPhase, setSelectedMethodologyPhase] = useState<string>('01');
@@ -693,6 +703,46 @@ export default function App() {
       <AiChatbot />
 
     </div>
+  );
+}
+
+// Protected Route Gating Helper
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const token = localStorage.getItem('nexloop_admin_token');
+  if (!token) {
+    return <Navigate to="/admin/login" replace />;
+  }
+  return <>{children}</>;
+}
+
+// Centralized Router Config
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Public Website */}
+        <Route path="/" element={<PublicWebsite />} />
+
+        {/* Admin Login Portal */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+
+        {/* Admin Panel Workspace */}
+        <Route path="/admin" element={
+          <ProtectedRoute>
+            <AdminLayout />
+          </ProtectedRoute>
+        }>
+          <Route index element={<AdminDashboard />} />
+          <Route path="leads" element={<AdminLeads />} />
+          <Route path="conversations" element={<AdminConversations />} />
+          <Route path="knowledge-base" element={<AdminKnowledgeBase />} />
+          <Route path="settings" element={<AdminSettings />} />
+        </Route>
+
+        {/* Catch-all Redirect */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
