@@ -16,7 +16,8 @@ import {
   Clock, 
   Award,
   SlidersHorizontal,
-  ChevronDown
+  ChevronDown,
+  AlertCircle
 } from 'lucide-react';
 
 interface Lead {
@@ -35,6 +36,7 @@ export default function AdminLeads() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [serviceFilter, setServiceFilter] = useState('All');
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
   // Modals management state
   const [viewLead, setViewLead] = useState<Lead | null>(null);
@@ -53,29 +55,18 @@ export default function AdminLeads() {
 
   const loadLeads = async () => {
     try {
-      const res = await fetch('/api/admin/leads');
+      setLoading(true);
+      setErrorStatus(null);
+      const res = await fetch('/api/admin?action=leads');
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         setLeads(json.data);
       } else {
-        throw new Error('Fallback to localStorage');
+        throw new Error(json.error || 'Server returned invalid or empty leads payload.');
       }
-    } catch {
-      // Check localStorage fallback
-      const cached = localStorage.getItem('nexloop_leads');
-      if (cached) {
-        setLeads(JSON.parse(cached));
-      } else {
-        // Initial mock static leads database
-        const fallbackLeads = [
-          { id: "L-301", name: "Sarah Al-Mansoori", email: "sarah.m@sharjahholding.ae", phone: "+971 50 123 4567", service_interest: "Remote UAE Corporate License", status: "New", created_at: new Date(Date.now() - 3600000 * 2).toISOString() },
-          { id: "L-302", name: "David Chen", email: "david@chinahub.com", phone: "+86 139 8888 7777", service_interest: "Amazon & Noon Support", status: "Contacted", created_at: new Date(Date.now() - 3600000 * 24).toISOString() },
-          { id: "L-303", name: "Marcus Thorne", email: "m.thorne@vortex-digital.co.uk", phone: "+44 7911 123456", service_interest: "Shopify", status: "Qualified", created_at: new Date(Date.now() - 3600000 * 48).toISOString() },
-          { id: "L-304", name: "Fatima Al-Suwaidi", email: "f.suwaidi@noon-seller.ae", phone: "+971 52 987 6543", service_interest: "Local UAE Sourcing", status: "Negotiating", created_at: new Date(Date.now() - 3600000 * 96).toISOString() }
-        ];
-        setLeads(fallbackLeads);
-        localStorage.setItem('nexloop_leads', JSON.stringify(fallbackLeads));
-      }
+    } catch (err: any) {
+      console.error("[Leads Page] Load leads error:", err);
+      setErrorStatus(err.message || 'Database connection error. Failed to retrieve leads from Supabase.');
     } finally {
       setLoading(false);
     }
@@ -85,46 +76,35 @@ export default function AdminLeads() {
     loadLeads();
   }, []);
 
-  const saveToLocalStorage = (updatedLeads: Lead[]) => {
-    setLeads(updatedLeads);
-    localStorage.setItem('nexloop_leads', JSON.stringify(updatedLeads));
-  };
-
   const handleCreateLead = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setErrorStatus(null);
     try {
-      const res = await fetch('/api/admin/leads', {
+      const res = await fetch('/api/admin?action=leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formFields)
       });
       const data = await res.json();
       if (data.success && data.data) {
-        const updated = [data.data, ...leads];
-        saveToLocalStorage(updated);
+        setCreatingLead(false);
+        setFormFields({
+          name: '',
+          email: '',
+          phone: '',
+          service_interest: 'Remote UAE Corporate License',
+          status: 'New'
+        });
+        await loadLeads();
       } else {
-        throw new Error();
+        throw new Error(data.error || 'Database rejected post submission.');
       }
-    } catch {
-      // Offline/Local Memory Fallback
-      const added: Lead = {
-        id: "L-" + Math.floor(Math.random() * 1000 + 100),
-        created_at: new Date().toISOString(),
-        ...formFields
-      };
-      const updated = [added, ...leads];
-      saveToLocalStorage(updated);
+    } catch (err: any) {
+      console.error("[Leads Page] Create lead error:", err);
+      setErrorStatus(err.message || 'Failed to save new lead. Database connection rejected the record insert.');
     } finally {
       setSubmitting(false);
-      setCreatingLead(false);
-      setFormFields({
-        name: '',
-        email: '',
-        phone: '',
-        service_interest: 'Remote UAE Corporate License',
-        status: 'New'
-      });
     }
   };
 
@@ -132,42 +112,42 @@ export default function AdminLeads() {
     e.preventDefault();
     if (!editingLead) return;
     setSubmitting(true);
+    setErrorStatus(null);
     try {
-      const res = await fetch('/api/admin/leads', {
+      const res = await fetch('/api/admin?action=leads', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingLead)
       });
       const data = await res.json();
       if (data.success) {
-        const updated = leads.map(l => l.id === editingLead.id ? editingLead : l);
-        saveToLocalStorage(updated);
+        setEditingLead(null);
+        await loadLeads();
       } else {
-        throw new Error();
+        throw new Error(data.error || 'DB update operation rejected.');
       }
-    } catch {
-      const updated = leads.map(l => l.id === editingLead.id ? editingLead : l);
-      saveToLocalStorage(updated);
+    } catch (err: any) {
+      console.error("[Leads Page] Edit lead error:", err);
+      setErrorStatus(err.message || 'Failed to sync updates to Supabase.');
     } finally {
       setSubmitting(false);
-      setEditingLead(null);
     }
   };
 
   const handleDeleteLead = async (id: string) => {
     if (!window.confirm("Verify: Are you sure you wish to delete this CRM lead record? This is irreversible.")) return;
+    setErrorStatus(null);
     try {
-      const res = await fetch(`/api/admin/leads?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin?action=leads&id=${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
-        const updated = leads.filter(l => l.id !== id);
-        saveToLocalStorage(updated);
+        await loadLeads();
       } else {
-        throw new Error();
+        throw new Error(data.error || 'DB delete operation rejected.');
       }
-    } catch {
-      const updated = leads.filter(l => l.id !== id);
-      saveToLocalStorage(updated);
+    } catch (err: any) {
+      console.error("[Leads Page] Delete lead error:", err);
+      setErrorStatus(err.message || 'Failed to delete lead from Supabase.');
     }
   };
 
@@ -220,6 +200,14 @@ export default function AdminLeads() {
           <span>New Lead Record</span>
         </button>
       </div>
+
+      {/* Error alert indicator */}
+      {errorStatus && (
+        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 text-red-300 rounded-2xl text-xs font-mono">
+          <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+          <span>{errorStatus}</span>
+        </div>
+      )}
 
       {/* Toolbar - Search, Sort and Filtering Controls */}
       <div className="p-5 bg-[#111111]/95 border border-white/5 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-4 select-none">

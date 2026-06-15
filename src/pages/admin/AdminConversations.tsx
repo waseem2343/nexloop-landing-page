@@ -13,7 +13,8 @@ import {
   Send, 
   Bot, 
   User,
-  ShieldAlert
+  ShieldAlert,
+  AlertCircle
 } from 'lucide-react';
 
 interface Conversation {
@@ -30,32 +31,25 @@ export default function AdminConversations() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sourceFilter, setSourceFilter] = useState('All');
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
   
   // Drawer / Detail display control
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
 
   const loadConversations = async () => {
     try {
-      const res = await fetch('/api/admin/conversations');
+      setLoading(true);
+      setErrorStatus(null);
+      const res = await fetch('/api/admin?action=conversations');
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         setConversations(json.data);
       } else {
-        throw new Error('Fallback to localStorage');
+        throw new Error(json.error || 'Server rejected or returned empty conversation data payload.');
       }
-    } catch {
-      const cached = localStorage.getItem('nexloop_conversations');
-      if (cached) {
-        setConversations(JSON.parse(cached));
-      } else {
-        const fallbacks = [
-          { id: "C-101", source: "Website Chat", sender: "User", message: "Hi, I am interested in launching an Amazon UAE store but I live in the UK. Can you help with SPC Sharjah license and FBA setups?", ai_reply: "Welcome! Yes, absolutely. Nexloop specializes in remote SPC Sharjah business licenses and FBA/logistics audits remotely. We can coordinate the full corporate setup and brand launch without you needing to travel.", created_at: new Date(Date.now() - 3600000 * 1.5).toISOString() },
-          { id: "C-102", source: "Website Chat", sender: "User", message: "Do you provide product sourcing from local Dubai wholesalers?", ai_reply: "Yes, we do! Our local UAE team offers direct wholesale supplier coordination, direct product sourcing, and logistical audits locally inside the Emirates.", created_at: new Date(Date.now() - 3600000 * 12).toISOString() },
-          { id: "C-103", source: "Website Chat", sender: "User", message: "hello, what is nexloop?", ai_reply: "Hello! Nexloop is an elite digital growth agency based in SPC Freezone, Sharjah, UAE. We provide customized support for Amazon & Noon, Shopify hub creation, growth marketing ads, and secure remote corporate structures.", created_at: new Date(Date.now() - 3600000 * 36).toISOString() }
-        ];
-        setConversations(fallbacks);
-        localStorage.setItem('nexloop_conversations', JSON.stringify(fallbacks));
-      }
+    } catch (err: any) {
+      console.error("[Conversations Page] Load error:", err);
+      setErrorStatus(err.message || 'Database connection error. Failed to load chat logs from Supabase.');
     } finally {
       setLoading(false);
     }
@@ -65,28 +59,22 @@ export default function AdminConversations() {
     loadConversations();
   }, []);
 
-  const saveToLocalStorage = (updated: Conversation[]) => {
-    setConversations(updated);
-    localStorage.setItem('nexloop_conversations', JSON.stringify(updated));
-  };
-
   const handleDeleteConvo = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm("Verify: Are you sure you wish to delete this dialogue log entry from the database?")) return;
+    setErrorStatus(null);
     try {
-      const res = await fetch(`/api/admin/conversations?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin?action=conversations&id=${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
-        const updated = conversations.filter(c => c.id !== id);
-        saveToLocalStorage(updated);
         if (activeConvo?.id === id) setActiveConvo(null);
+        await loadConversations();
       } else {
-        throw new Error();
+        throw new Error(data.error || 'Database delete request rejected.');
       }
-    } catch {
-      const updated = conversations.filter(c => c.id !== id);
-      saveToLocalStorage(updated);
-      if (activeConvo?.id === id) setActiveConvo(null);
+    } catch (err: any) {
+      console.error("[Conversations Page] Delete error:", err);
+      setErrorStatus(err.message || 'Failed to delete dialogue log from Supabase.');
     }
   };
 
@@ -109,6 +97,13 @@ export default function AdminConversations() {
         <h2 className="text-2xl font-display font-black text-white tracking-tight">AI Chatbot Conversations Tracer</h2>
         <p className="text-xs text-outline-brand mt-0.5">Audit live interactions of the Gemini Cognitive Core with website clients.</p>
       </div>
+
+      {errorStatus && (
+        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 text-red-300 rounded-2xl text-xs font-mono select-text">
+          <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+          <span>{errorStatus}</span>
+        </div>
+      )}
 
       {/* Toolbar Toolbar and Controls */}
       <div className="p-5 bg-[#111111]/95 border border-white/5 rounded-3xl flex flex-col sm:flex-row justify-between items-center gap-4 select-none">

@@ -32,7 +32,7 @@ export default function AdminSettings() {
   const loadSettings = async () => {
     try {
       setErrorStatus(null);
-      const res = await fetch('/api/admin/settings');
+      const res = await fetch('/api/admin?action=settings');
       const json = await res.json();
       if (json.success && json.data) {
         setSettings({
@@ -43,16 +43,11 @@ export default function AdminSettings() {
           fallbackMessage: json.data.fallbackMessage || 'Our complimentary interactive assistant is operating at capacity.'
         });
       } else {
-        throw new Error();
+        throw new Error(json.error || 'Failed to retrieve set of system instructions.');
       }
-    } catch {
-      // Local storage fallback check
-      const cached = localStorage.getItem('nexloop_settings');
-      if (cached) {
-        setSettings(JSON.parse(cached));
-      } else {
-        localStorage.setItem('nexloop_settings', JSON.stringify(settings));
-      }
+    } catch (err: any) {
+      console.error("[Settings Page] Load error:", err);
+      setErrorStatus(err.message || 'Database connection error. Failed to load setting registers from Supabase.');
     } finally {
       setLoading(false);
     }
@@ -69,7 +64,7 @@ export default function AdminSettings() {
     setErrorStatus(null);
 
     try {
-      const res = await fetch('/api/admin/settings', {
+      const res = await fetch('/api/admin?action=settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
@@ -77,14 +72,12 @@ export default function AdminSettings() {
       const data = await res.json();
       if (data.success) {
         setSavedSuccess(true);
-        localStorage.setItem('nexloop_settings', JSON.stringify(settings));
       } else {
         throw new Error(data.error || "Failed to update settings");
       }
     } catch (err: any) {
-      console.warn("Supabase update failed, saving locally:", err);
-      localStorage.setItem('nexloop_settings', JSON.stringify(settings));
-      setSavedSuccess(true);
+      console.error("[Settings Page] Sync error:", err);
+      setErrorStatus(err.message || 'Database connection failed. Unable to synchronize settings to Supabase.');
     } finally {
       setSaving(false);
     }

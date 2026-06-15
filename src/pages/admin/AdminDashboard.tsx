@@ -37,11 +37,14 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
+  const [diagData, setDiagData] = useState<any>(null);
+  const [runningDiag, setRunningDiag] = useState(false);
+  const [diagError, setDiagError] = useState<string | null>(null);
 
   const fetchDashboardData = async () => {
     try {
       setErrorStatus(null);
-      const res = await fetch('/api/admin/dashboard');
+      const res = await fetch('/api/admin?action=dashboard');
       const data = await res.json();
       if (data.success) {
         setStats(data.stats);
@@ -50,25 +53,18 @@ export default function AdminDashboard() {
         throw new Error(data.error || "Failed to load dashboard data");
       }
     } catch (err: any) {
-      console.error(err);
-      setErrorStatus("Using offline mock data fallback. Connected to active demonstration nodes.");
+      console.error("[Dashboard Page] Fetch error:", err);
+      setErrorStatus(err.message || "Database connection issue detected. Failed to retrieve statistics from Supabase.");
       
-      // Seed fallback metrics directly for visual assurance
       setStats({
-        totalLeads: 24,
-        totalConversations: 114,
-        totalKnowledge: 12,
-        aiStatus: "Fully Operational",
+        totalLeads: 0,
+        totalConversations: 0,
+        totalKnowledge: 0,
+        aiStatus: "Offline / Disconnected",
         supabaseConnected: false,
         databaseHealthy: false
       });
-      setActivity([
-        { type: "lead", message: "New lead captured: Sarah Al-Mansoori (Remote UAE Corporate License)", date: new Date(Date.now() - 3600000 * 2).toISOString() },
-        { type: "chat", message: "Chat query: 'Hi, I am interested in launching an Amazon UAE store...'", date: new Date(Date.now() - 3600000 * 3.5).toISOString() },
-        { type: "lead", message: "New lead captured: David Chen (Amazon & Noon Support)", date: new Date(Date.now() - 3600000 * 12).toISOString() },
-        { type: "chat", message: "Chat query: 'Do you provide product sourcing from local Dubai wholesalers?'", date: new Date(Date.now() - 3600000 * 24).toISOString() },
-        { type: "lead", message: "New lead captured: Marcus Thorne (Shopify)", date: new Date(Date.now() - 3600000 * 48).toISOString() }
-      ]);
+      setActivity([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -134,8 +130,8 @@ export default function AdminDashboard() {
       
       {/* Alert Warning for fallback states */}
       {errorStatus && (
-        <div className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-2xl text-xs font-mono">
-          <AlertCircle className="w-5 h-5 shrink-0 text-amber-400" />
+        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 text-red-300 rounded-2xl text-xs font-mono select-text">
+          <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
           <span>{errorStatus}</span>
         </div>
       )}
@@ -258,7 +254,7 @@ export default function AdminDashboard() {
             {/* Database check line */}
             <div className="p-3.5 rounded-2xl border border-white/[0.04] bg-white/[0.01] flex justify-between items-center">
               <div className="flex items-center gap-2.5">
-                <Database className={`w-4 h-4 ${stats?.databaseHealthy ? 'text-emerald-400 animate-pulse' : 'text-amber-400'}`} />
+                <Database className={`w-4 h-4 ${stats?.databaseHealthy ? 'text-emerald-400' : 'text-amber-400'}`} />
                 <span>Supabase Connection</span>
               </div>
               <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase border ${
@@ -304,20 +300,148 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="pt-4 border-t border-white/5 space-y-3 font-mono text-[10px] text-outline-brand">
-            <span className="text-white block font-semibold uppercase tracking-wider text-[9px]">Platform Logs Index</span>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>TLS connection handshake certified</span>
+          {/* Interactive Supabase Diagnostics Tool */}
+          <div className="pt-4 border-t border-white/5 space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-white font-semibold uppercase tracking-wider text-[9px] font-mono">Supabase Real-time Auditor</span>
+              <button
+                onClick={async () => {
+                  setRunningDiag(true);
+                  setDiagError(null);
+                  try {
+                    const res = await fetch("/api/admin/test-connection");
+                    const data = await res.json();
+                    if (data.success) {
+                      setDiagData(data);
+                    } else {
+                      throw new Error(data.error || "Failed to audit keys");
+                    }
+                  } catch (e: any) {
+                    setDiagError(e.message || "Auditing error");
+                  } finally {
+                    setRunningDiag(false);
+                  }
+                }}
+                disabled={runningDiag}
+                className="px-2.5 py-1 text-[9px] uppercase tracking-wider rounded bg-secondary-container/15 hover:bg-secondary-container/25 text-secondary-container transition-all cursor-pointer font-bold border border-secondary-container/20 disabled:opacity-50"
+              >
+                {runningDiag ? "Testing..." : "Verify Keys & Tables"}
+              </button>
             </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>CORS requests strictly restricted to origins</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Supabase environment secrets securely loaded</span>
-            </div>
+
+            {diagError && (
+              <div className="p-3 bg-red-950/20 border border-red-900/30 text-red-300 rounded-2xl text-[10px] font-mono">
+                Error during check: {diagError}
+              </div>
+            )}
+
+            {diagData && (
+              <div className="p-3.5 rounded-2xl bg-white/[0.01] border border-white/5 space-y-3 font-mono text-[10px]">
+                <div className="flex justify-between items-center">
+                  <span className="text-outline-brand">API Keys Configured:</span>
+                  <span className={`font-bold ${diagData.supabaseConfigured ? "text-emerald-400" : "text-amber-400"}`}>
+                    {diagData.supabaseConfigured ? "YES" : "NO"}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-outline-brand text-[9px] uppercase tracking-wider">Environment Variable status:</div>
+                  <div className="flex justify-between pl-2">
+                    <span className="text-white/40">- SUPABASE_URL:</span>
+                    <span className="text-white truncate max-w-[120px]">{diagData.envState.maskedUrl}</span>
+                  </div>
+                  <div className="flex justify-between pl-2">
+                    <span className="text-white/40">- SUPABASE_ANON_KEY:</span>
+                    <span className={diagData.envState.keyExists ? "text-emerald-400" : "text-red-400"}>
+                      {diagData.envState.keyExists ? "Present" : "Missing"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 pt-2 border-t border-white/5">
+                  <div className="text-outline-brand text-[9px] uppercase tracking-wider">Required Schema Tables:</div>
+                  
+                  {/* Lead checking */}
+                  <div className="flex justify-between items-start pl-1">
+                    <span className="text-white/75">leads table:</span>
+                    <div className="text-right">
+                      {diagData.connectionTest.tables.leads.ok ? (
+                        <span className="text-emerald-400 font-bold">✔ OK ({diagData.connectionTest.tables.leads.count ?? 0} rows)</span>
+                      ) : (
+                        <span className="text-rose-400 text-[9px] block max-w-[150px] leading-tight">
+                          ❌ {diagData.connectionTest.tables.leads.error || "Missing / inaccessible"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Conversations checking */}
+                  <div className="flex justify-between items-start pl-1">
+                    <span className="text-white/75">conversations table:</span>
+                    <div className="text-right">
+                      {diagData.connectionTest.tables.conversations.ok ? (
+                        <span className="text-emerald-400 font-bold">✔ OK ({diagData.connectionTest.tables.conversations.count ?? 0} rows)</span>
+                      ) : (
+                        <span className="text-rose-400 text-[9px] block max-w-[150px] leading-tight">
+                          ❌ {diagData.connectionTest.tables.conversations.error || "Missing / inaccessible"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Knowledge base checking */}
+                  <div className="flex justify-between items-start pl-1">
+                    <span className="text-white/75">knowledge_base table:</span>
+                    <div className="text-right">
+                      {diagData.connectionTest.tables.knowledge_base.ok ? (
+                        <span className="text-emerald-400 font-bold">✔ OK ({diagData.connectionTest.tables.knowledge_base.count ?? 0} rows)</span>
+                      ) : (
+                        <span className="text-rose-400 text-[9px] block max-w-[150px] leading-tight">
+                          ❌ {diagData.connectionTest.tables.knowledge_base.error || "Missing / inaccessible"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* AI Settings checking */}
+                  <div className="flex justify-between items-start pl-1">
+                    <span className="text-white/75">ai_settings table:</span>
+                    <div className="text-right">
+                      {diagData.connectionTest.tables.ai_settings.ok ? (
+                        <span className="text-emerald-400 font-bold">✔ OK ({diagData.connectionTest.tables.ai_settings.count ?? 0} rows)</span>
+                      ) : (
+                        <span className="text-rose-400 text-[9px] block max-w-[150px] leading-tight">
+                          ❌ {diagData.connectionTest.tables.ai_settings.error || "Missing / inaccessible"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded bg-white/[0.02] border border-white/5 text-[9px] text-[#8c90a1]">
+                  <span className="text-white font-bold block mb-0.5">Status Statement:</span>
+                  {diagData.connectionTest.status}
+                </div>
+              </div>
+            )}
+
+            {!diagData && (
+              <div className="pt-2 border-t border-white/5 space-y-3 font-mono text-[10px] text-outline-brand">
+                <span className="text-white block font-semibold uppercase tracking-wider text-[9px]">Platform Logs Index</span>
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>TLS connection handshake certified</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>CORS requests strictly restricted to origins</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>Supabase environment secrets securely loaded</span>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
