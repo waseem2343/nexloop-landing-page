@@ -339,96 +339,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case "knowledge-base": {
         console.log(`[KB API SDK] Incoming ${req.method} request. Query:`, req.query);
         
+        if (!supabase) {
+          console.warn("[KB API SDK] Supabase not configured.");
+          return res.status(400).json({ success: false, error: "Supabase not configured" });
+        }
+
         if (req.method === "GET") {
           console.log("[KB API SDK] GET: Fetching articles from Supabase...");
-          if (supabase) {
-            try {
-              const { data, error } = await supabase.from("knowledge_base").select("*").order("id", { ascending: true });
-              if (error) {
-                console.error("[KB API SDK] Supabase DB Select Error:", error);
-                throw error;
-              }
-              console.log(`[KB API SDK] GET Success: Fetched ${data?.length || 0} articles.`);
-              return res.status(200).json({ success: true, data: data || [] });
-            } catch (err: any) {
-              console.warn("[KB API SDK] Supabase load failed, falling back to local memory:", err.message || err);
+          try {
+            const { data, error } = await supabase.from("knowledge_base").select("*").order("id", { ascending: true });
+            if (error) {
+              console.error("[KB API SDK] Supabase DB Select Error:", error);
+              return res.status(400).json({ success: false, error: error.message });
             }
-          } else {
-            console.warn("[KB API SDK] Supabase not configured. Using local fallback.");
+            console.log(`[KB API SDK] GET Success: Fetched ${data?.length || 0} articles.`);
+            return res.status(200).json({ success: true, data: data || [] });
+          } catch (err: any) {
+            console.error("[KB API SDK] GET database select failed:", err);
+            return res.status(500).json({ success: false, error: err.message || "Database connection error" });
           }
-          return res.status(200).json({ success: true, data: localKnowledge });
         }
 
         if (req.method === "POST") {
           const newArticle = req.body;
           console.log("[KB API SDK] POST: Inserting article with payload:", newArticle);
-          if (supabase) {
-            try {
-              const { data, error } = await supabase.from("knowledge_base").insert([newArticle]).select();
-              if (error) {
-                console.error("[KB API SDK] Supabase DB Insert Error:", error);
-                throw error;
-              }
-              console.log("[KB API SDK] POST Success: Inserted article into Supabase:", data[0]);
-              return res.status(201).json({ success: true, data: data[0] });
-            } catch (err: any) {
-              console.warn("[KB API SDK] Supabase insert failed, falling back to local memory:", err.message || err);
+          try {
+            const { data, error } = await supabase.from("knowledge_base").insert([newArticle]).select();
+            if (error) {
+              console.error("[KB API SDK] Supabase DB Insert Error:", error);
+              return res.status(400).json({ success: false, error: error.message });
             }
-          } else {
-            console.warn("[KB API SDK] Supabase not configured. Simulating in memory.");
+            console.log("[KB API SDK] POST Success: Inserted article into Supabase:", data[0]);
+            return res.status(201).json({ success: true, data: data[0] });
+          } catch (err: any) {
+            console.error("[KB API SDK] POST Database insert failed:", err);
+            return res.status(500).json({ success: false, error: err.message || "Database connection error" });
           }
-          const added = { id: "K-" + Math.floor(Math.random() * 1000), ...newArticle };
-          localKnowledge.unshift(added);
-          console.log("[KB API SDK] POST Fallback Success: Generated memory item:", added);
-          return res.status(201).json({ success: true, data: added });
         }
 
         if (req.method === "PUT") {
           const { id, ...updatedParts } = req.body;
           console.log(`[KB API SDK] PUT: Modifying article ID ${id} with payload:`, updatedParts);
-          if (supabase) {
-            try {
-              const parsedId = /^\d+$/.test(String(id)) ? parseInt(String(id), 10) : id;
-              const { data, error } = await supabase.from("knowledge_base").update(updatedParts).eq("id", parsedId).select();
-              if (error) {
-                console.error("[KB API SDK] Supabase DB Update Error:", error);
-                throw error;
-              }
-              console.log("[KB API SDK] PUT Success: Updated article in Supabase:", data[0]);
-              return res.status(200).json({ success: true, data: data[0] });
-            } catch (err: any) {
-              console.warn("[KB API SDK] Supabase update failed, falling back to local memory:", err.message || err);
+          try {
+            const parsedId = /^\d+$/.test(String(id)) ? parseInt(String(id), 10) : id;
+            const { data, error } = await supabase.from("knowledge_base").update(updatedParts).eq("id", parsedId).select();
+            if (error) {
+              console.error("[KB API SDK] Supabase DB Update Error:", error);
+              return res.status(400).json({ success: false, error: error.message });
             }
-          } else {
-            console.warn("[KB API SDK] Supabase not configured. Updating in memory.");
+            if (!data || data.length === 0) {
+              return res.status(404).json({ success: false, error: "Article not found or no change applied" });
+            }
+            console.log("[KB API SDK] PUT Success: Updated article in Supabase:", data[0]);
+            return res.status(200).json({ success: true, data: data[0] });
+          } catch (err: any) {
+            console.error("[KB API SDK] PUT Database update failed:", err);
+            return res.status(500).json({ success: false, error: err.message || "Database connection error" });
           }
-          localKnowledge = localKnowledge.map(k => k.id === id ? { ...k, ...updatedParts } : k);
-          console.log("[KB API SDK] PUT Fallback Success: Updated memory item for ID:", id);
-          return res.status(200).json({ success: true, data: { id, ...updatedParts } });
         }
 
         if (req.method === "DELETE") {
           const id = req.query.id as string;
           console.log(`[KB API SDK] DELETE: Removing article ID ${id}`);
-          if (supabase) {
-            try {
-              const parsedId = /^\d+$/.test(id) ? parseInt(id, 10) : id;
-              const { error } = await supabase.from("knowledge_base").delete().eq("id", parsedId);
-              if (error) {
-                console.error("[KB API SDK] Supabase DB Delete Error:", error);
-                throw error;
-              }
-              console.log(`[KB API SDK] DELETE Success: Removed article ID ${parsedId} from Supabase.`);
-              return res.status(200).json({ success: true, id });
-            } catch (err: any) {
-              console.warn("[KB API SDK] Supabase delete failed, falling back to local memory:", err.message || err);
+          try {
+            const parsedId = /^\d+$/.test(id) ? parseInt(id, 10) : id;
+            const { error } = await supabase.from("knowledge_base").delete().eq("id", parsedId);
+            if (error) {
+              console.error("[KB API SDK] Supabase DB Delete Error:", error);
+              return res.status(400).json({ success: false, error: error.message });
             }
-          } else {
-            console.warn("[KB API SDK] Supabase not configured. Deleting from memory.");
+            console.log(`[KB API SDK] DELETE Success: Removed article ID ${parsedId} from Supabase.`);
+            return res.status(200).json({ success: true, id });
+          } catch (err: any) {
+            console.error("[KB API SDK] DELETE Database deletion failed:", err);
+            return res.status(500).json({ success: false, error: err.message || "Database connection error" });
           }
-          localKnowledge = localKnowledge.filter(k => k.id !== id);
-          console.log("[KB API SDK] DELETE Fallback Success: Filtered out memory item for ID:", id);
-          return res.status(200).json({ success: true, id });
         }
         break;
       }
