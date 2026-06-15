@@ -53,6 +53,125 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     switch (action) {
+      case "test-connection": {
+        if (req.method !== "GET") return res.status(405).json({ error: "Method Not Allowed" });
+
+        const urlExists = !!supabaseUrl;
+        const keyExists = !!supabaseAnonKey;
+        const isNotPlaceholder = supabaseUrl !== "https://your-supabase-project.supabase.co";
+        
+        let maskedUrl = "Not Configured";
+        if (supabaseUrl) {
+          try {
+            const parsed = new URL(supabaseUrl);
+            maskedUrl = `${parsed.protocol}//${parsed.hostname.substring(0, 4)}...${parsed.hostname.slice(-12)}`;
+          } catch {
+            maskedUrl = "Invalid URL Format";
+          }
+        }
+
+        let overallStatus = "Not Configured";
+        let overallError: string | null = null;
+        const tableTests: Record<string, { ok: boolean; count: number | null; error: string | null }> = {
+          leads: { ok: false, count: null, error: null },
+          conversations: { ok: false, count: null, error: null },
+          knowledge_base: { ok: false, count: null, error: null },
+          ai_settings: { ok: false, count: null, error: null }
+        };
+
+        if (supabase) {
+          try {
+            overallStatus = "Configured & Hitting API...";
+            
+            // Test 1: leads
+            try {
+              const { count, error } = await supabase.from("leads").select("*", { count: "exact", head: true });
+              if (error) {
+                tableTests.leads.error = error.message || JSON.stringify(error);
+              } else {
+                tableTests.leads.ok = true;
+                tableTests.leads.count = count;
+              }
+            } catch (e: any) {
+              tableTests.leads.error = e.message || String(e);
+            }
+
+            // Test 2: conversations
+            try {
+              const { count, error } = await supabase.from("conversations").select("*", { count: "exact", head: true });
+              if (error) {
+                tableTests.conversations.error = error.message || JSON.stringify(error);
+              } else {
+                tableTests.conversations.ok = true;
+                tableTests.conversations.count = count;
+              }
+            } catch (e: any) {
+              tableTests.conversations.error = e.message || String(e);
+            }
+
+            // Test 3: knowledge_base
+            try {
+              const { count, error } = await supabase.from("knowledge_base").select("*", { count: "exact", head: true });
+              if (error) {
+                tableTests.knowledge_base.error = error.message || JSON.stringify(error);
+              } else {
+                tableTests.knowledge_base.ok = true;
+                tableTests.knowledge_base.count = count;
+              }
+            } catch (e: any) {
+              tableTests.knowledge_base.error = e.message || String(e);
+            }
+
+            // Test 4: ai_settings
+            try {
+              const { count, error } = await supabase.from("ai_settings").select("*", { count: "exact", head: true });
+              if (error) {
+                tableTests.ai_settings.error = error.message || JSON.stringify(error);
+              } else {
+                tableTests.ai_settings.ok = true;
+                tableTests.ai_settings.count = count;
+              }
+            } catch (e: any) {
+              tableTests.ai_settings.error = e.message || String(e);
+            }
+
+            const anySuccess = Object.values(tableTests).some(val => val.ok);
+            const allErrors = Object.values(tableTests).map(val => val.error).filter(Boolean);
+            
+            if (anySuccess) {
+              overallStatus = "Working";
+            } else if (allErrors.length > 0) {
+              overallStatus = "API Configured but Tables Missing or Authentication Failed";
+              overallError = allErrors[0];
+            } else {
+              overallStatus = "Configured but Unresponsive";
+            }
+          } catch (err: any) {
+            overallStatus = "Initialization / Connection Failed";
+            overallError = err.message || String(err);
+          }
+        } else {
+          overallStatus = "Supabase Env Variables Missing";
+          overallError = "Please add SUPABASE_URL and SUPABASE_ANON_KEY to your Vercel Environment Variables.";
+        }
+
+        return res.status(200).json({
+          success: true,
+          supabaseConfigured: isSupabaseConfigured,
+          envState: {
+            urlExists,
+            keyExists,
+            isNotPlaceholder,
+            maskedUrl,
+          },
+          connectionTest: {
+            status: overallStatus,
+            error: overallError,
+            tables: tableTests
+          }
+        });
+      }
+
       case "dashboard": {
         if (req.method !== "GET") return res.status(405).json({ error: "Method Not Allowed" });
         
@@ -218,64 +337,97 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "knowledge-base": {
+        console.log(`[KB API SDK] Incoming ${req.method} request. Query:`, req.query);
+        
         if (req.method === "GET") {
+          console.log("[KB API SDK] GET: Fetching articles from Supabase...");
           if (supabase) {
             try {
               const { data, error } = await supabase.from("knowledge_base").select("*").order("id", { ascending: true });
-              if (error) throw error;
+              if (error) {
+                console.error("[KB API SDK] Supabase DB Select Error:", error);
+                throw error;
+              }
+              console.log(`[KB API SDK] GET Success: Fetched ${data?.length || 0} articles.`);
               return res.status(200).json({ success: true, data: data || [] });
             } catch (err: any) {
-              console.warn("Supabase knowledge_base load failed (falling back to memory):", err.message || err);
+              console.warn("[KB API SDK] Supabase load failed, falling back to local memory:", err.message || err);
             }
+          } else {
+            console.warn("[KB API SDK] Supabase not configured. Using local fallback.");
           }
           return res.status(200).json({ success: true, data: localKnowledge });
         }
 
         if (req.method === "POST") {
           const newArticle = req.body;
+          console.log("[KB API SDK] POST: Inserting article with payload:", newArticle);
           if (supabase) {
             try {
               const { data, error } = await supabase.from("knowledge_base").insert([newArticle]).select();
-              if (error) throw error;
+              if (error) {
+                console.error("[KB API SDK] Supabase DB Insert Error:", error);
+                throw error;
+              }
+              console.log("[KB API SDK] POST Success: Inserted article into Supabase:", data[0]);
               return res.status(201).json({ success: true, data: data[0] });
-            } catch (err) {
-              console.warn("Supabase insert article failed, saving in memory:", err);
+            } catch (err: any) {
+              console.warn("[KB API SDK] Supabase insert failed, falling back to local memory:", err.message || err);
             }
+          } else {
+            console.warn("[KB API SDK] Supabase not configured. Simulating in memory.");
           }
           const added = { id: "K-" + Math.floor(Math.random() * 1000), ...newArticle };
           localKnowledge.unshift(added);
+          console.log("[KB API SDK] POST Fallback Success: Generated memory item:", added);
           return res.status(201).json({ success: true, data: added });
         }
 
         if (req.method === "PUT") {
           const { id, ...updatedParts } = req.body;
+          console.log(`[KB API SDK] PUT: Modifying article ID ${id} with payload:`, updatedParts);
           if (supabase) {
             try {
               const parsedId = /^\d+$/.test(String(id)) ? parseInt(String(id), 10) : id;
               const { data, error } = await supabase.from("knowledge_base").update(updatedParts).eq("id", parsedId).select();
-              if (error) throw error;
+              if (error) {
+                console.error("[KB API SDK] Supabase DB Update Error:", error);
+                throw error;
+              }
+              console.log("[KB API SDK] PUT Success: Updated article in Supabase:", data[0]);
               return res.status(200).json({ success: true, data: data[0] });
             } catch (err: any) {
-              console.warn("Supabase update article failed (falling back to memory):", err.message || err);
+              console.warn("[KB API SDK] Supabase update failed, falling back to local memory:", err.message || err);
             }
+          } else {
+            console.warn("[KB API SDK] Supabase not configured. Updating in memory.");
           }
           localKnowledge = localKnowledge.map(k => k.id === id ? { ...k, ...updatedParts } : k);
+          console.log("[KB API SDK] PUT Fallback Success: Updated memory item for ID:", id);
           return res.status(200).json({ success: true, data: { id, ...updatedParts } });
         }
 
         if (req.method === "DELETE") {
           const id = req.query.id as string;
+          console.log(`[KB API SDK] DELETE: Removing article ID ${id}`);
           if (supabase) {
             try {
               const parsedId = /^\d+$/.test(id) ? parseInt(id, 10) : id;
               const { error } = await supabase.from("knowledge_base").delete().eq("id", parsedId);
-              if (error) throw error;
+              if (error) {
+                console.error("[KB API SDK] Supabase DB Delete Error:", error);
+                throw error;
+              }
+              console.log(`[KB API SDK] DELETE Success: Removed article ID ${parsedId} from Supabase.`);
               return res.status(200).json({ success: true, id });
             } catch (err: any) {
-              console.warn("Supabase delete article failed (falling back to memory):", err.message || err);
+              console.warn("[KB API SDK] Supabase delete failed, falling back to local memory:", err.message || err);
             }
+          } else {
+            console.warn("[KB API SDK] Supabase not configured. Deleting from memory.");
           }
           localKnowledge = localKnowledge.filter(k => k.id !== id);
+          console.log("[KB API SDK] DELETE Fallback Success: Filtered out memory item for ID:", id);
           return res.status(200).json({ success: true, id });
         }
         break;
