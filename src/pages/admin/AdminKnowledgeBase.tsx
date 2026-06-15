@@ -44,29 +44,18 @@ export default function AdminKnowledgeBase() {
   });
 
   const loadArticles = async () => {
+    console.log("[KB Audit] Fetching articles from database...");
     try {
-      const res = await fetch('/api/admin/knowledge-base');
+      const res = await fetch('/api/admin?action=knowledge-base');
       const json = await res.json();
+      console.log("[KB Audit] GET response payload:", json);
       if (json.success && Array.isArray(json.data)) {
         setArticles(json.data);
       } else {
-        throw new Error();
+        console.error("[KB Audit] GET response was not successful or missing data array:", json);
       }
-    } catch {
-      // Local state fallback Check
-      const cached = localStorage.getItem('nexloop_knowledge');
-      if (cached) {
-        setArticles(JSON.parse(cached));
-      } else {
-        const fallbacks: Article[] = [
-          { id: "K-001", title: "SPC Sharjah Freezone remote licensing setup", category: "Corporate Setup", keywords: "SPC, Sharjah, license, freezone", status: "Published", content: "Nexloop helps clients with UAE company formation, free zone license setup, mainland license guidance, visa assistance, business activity selection, document preparation, and bank account guidance in SPC Sharjah Freezone." },
-          { id: "K-002", title: "Configuring Middle Eastern checkout gateways for Shopify", category: "Shopify Hub", keywords: "checkout, gateway, shopify, payment", status: "Published", content: "Detailed setup instructions for integrating checkouts like PayTabs, Tap Payments, and Checkout.com with Shopify stores for GCC currencies." },
-          { id: "K-003", title: "Amazon UAE Brand Registry compliance criteria Guide", category: "Amazon Support", keywords: "brand registry, amazon, trademark", status: "Draft", content: "Compliance requirements for registering your brand on Amazon UAE, including the need for a registered trademark in the UAE or WIPO." },
-          { id: "K-004", title: "Direct procurement pathways in UAE wholesale markets", category: "Local Sourcing", keywords: "procurement, sourcing, wholesale", status: "Published", content: "Guides on acquiring genuine materials directly from markets such as Deira, Dragon Mart, and other wholesale outlets in Dubai." }
-        ];
-        setArticles(fallbacks);
-        localStorage.setItem('nexloop_knowledge', JSON.stringify(fallbacks));
-      }
+    } catch (err: any) {
+      console.error("[KB Audit] GET request error:", err);
     } finally {
       setLoading(false);
     }
@@ -76,34 +65,25 @@ export default function AdminKnowledgeBase() {
     loadArticles();
   }, []);
 
-  const saveToLocalStorage = (updated: Article[]) => {
-    setArticles(updated);
-    localStorage.setItem('nexloop_knowledge', JSON.stringify(updated));
-  };
-
   const handleCreateArticle = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    console.log("[KB Audit] POST request payload:", formFields);
     try {
-      const res = await fetch('/api/admin/knowledge-base', {
+      const res = await fetch('/api/admin?action=knowledge-base', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formFields)
       });
       const data = await res.json();
+      console.log("[KB Audit] POST response payload:", data);
       if (data.success && data.data) {
-        const updated = [data.data, ...articles];
-        saveToLocalStorage(updated);
+        setArticles(prev => [data.data, ...prev]);
       } else {
-        throw new Error();
+        console.error("[KB Audit] POST failed, response error:", data.error || "No data");
       }
-    } catch {
-      const added: Article = {
-        id: "K-" + Math.floor(Math.random() * 1000 + 100),
-        ...formFields
-      };
-      const updated = [added, ...articles];
-      saveToLocalStorage(updated);
+    } catch (err) {
+      console.error("[KB Audit] POST application/network error:", err);
     } finally {
       setSubmitting(false);
       setCreatingArticle(false);
@@ -121,22 +101,23 @@ export default function AdminKnowledgeBase() {
     e.preventDefault();
     if (!editingArticle) return;
     setSubmitting(true);
+    console.log("[KB Audit] PUT request payload:", editingArticle);
     try {
-      const res = await fetch('/api/admin/knowledge-base', {
+      const res = await fetch('/api/admin?action=knowledge-base', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingArticle)
       });
       const data = await res.json();
-      if (data.success) {
-        const updated = articles.map(a => a.id === editingArticle.id ? editingArticle : a);
-        saveToLocalStorage(updated);
+      console.log("[KB Audit] PUT response payload:", data);
+      if (data.success && data.data) {
+        const updatedArticle = data.data;
+        setArticles(prev => prev.map(a => a.id === updatedArticle.id ? updatedArticle : a));
       } else {
-        throw new Error();
+        console.error("[KB Audit] PUT failed, response error:", data.error || "No data");
       }
-    } catch {
-      const updated = articles.map(a => a.id === editingArticle.id ? editingArticle : a);
-      saveToLocalStorage(updated);
+    } catch (err) {
+      console.error("[KB Audit] PUT application/network error:", err);
     } finally {
       setSubmitting(false);
       setEditingArticle(null);
@@ -145,18 +126,18 @@ export default function AdminKnowledgeBase() {
 
   const handleDeleteArticle = async (id: string) => {
     if (!window.confirm("Verify: Remove this article from AI self-learning knowledge bank index?")) return;
+    console.log("[KB Audit] DELETE request ID:", id);
     try {
-      const res = await fetch(`/api/admin/knowledge-base?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin?action=knowledge-base&id=${id}`, { method: 'DELETE' });
       const data = await res.json();
+      console.log("[KB Audit] DELETE response payload:", data);
       if (data.success) {
-        const updated = articles.filter(a => a.id !== id);
-        saveToLocalStorage(updated);
+        setArticles(prev => prev.filter(a => a.id !== id));
       } else {
-        throw new Error();
+        console.error("[KB Audit] DELETE failed, response error:", data.error || "No success flag");
       }
-    } catch {
-      const updated = articles.filter(a => a.id !== id);
-      saveToLocalStorage(updated);
+    } catch (err) {
+      console.error("[KB Audit] DELETE application/network error:", err);
     }
   };
 
