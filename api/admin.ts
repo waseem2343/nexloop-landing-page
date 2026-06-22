@@ -131,6 +131,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             isNotPlaceholder,
             maskedUrl,
           },
+          whatsAppState: {
+            tokenExists: !!process.env.WHATSAPP_TOKEN,
+            phoneIdExists: !!process.env.WHATSAPP_PHONE_NUMBER_ID,
+            verifyTokenExists: !!process.env.WHATSAPP_VERIFY_TOKEN,
+            tokenLength: process.env.WHATSAPP_TOKEN?.length || 0,
+            maskedPhoneId: process.env.WHATSAPP_PHONE_NUMBER_ID 
+              ? (process.env.WHATSAPP_PHONE_NUMBER_ID.length > 8 
+                  ? `${process.env.WHATSAPP_PHONE_NUMBER_ID.slice(0, 4)}...${process.env.WHATSAPP_PHONE_NUMBER_ID.slice(-4)}`
+                  : "***")
+              : "Missing",
+            maskedVerifyToken: process.env.WHATSAPP_VERIFY_TOKEN
+              ? (process.env.WHATSAPP_VERIFY_TOKEN.length > 4
+                  ? `${process.env.WHATSAPP_VERIFY_TOKEN.slice(0, 2)}...${process.env.WHATSAPP_VERIFY_TOKEN.slice(-2)}`
+                  : "***")
+              : "Missing"
+          },
           connectionTest: {
             status: overallStatus,
             error: overallError,
