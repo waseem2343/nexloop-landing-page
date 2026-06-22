@@ -418,6 +418,48 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                {diagData.whatsAppState && (
+                  <div className="space-y-1.5 pt-2 border-t border-white/5 font-mono text-[9px]">
+                    <div className="text-emerald-400 text-[9px] uppercase tracking-wider flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping"></span>
+                      <span>WhatsApp Cloud API Status:</span>
+                    </div>
+                    
+                    <div className="flex justify-between pl-1">
+                      <span className="text-white/60">WHATSAPP_TOKEN:</span>
+                      <span>
+                        {diagData.whatsAppState.tokenExists ? (
+                          <span className="text-emerald-400 font-bold">✔ Set ({diagData.whatsAppState.tokenLength} chars)</span>
+                        ) : (
+                          <span className="text-rose-400 font-bold">❌ Missing</span>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between pl-1">
+                      <span className="text-white/60">WHATSAPP_PHONE_NUMBER_ID:</span>
+                      <span>
+                        {diagData.whatsAppState.phoneIdExists ? (
+                          <span className="text-emerald-400 font-bold">✔ Set ({diagData.whatsAppState.maskedPhoneId})</span>
+                        ) : (
+                          <span className="text-rose-400 font-bold">❌ Missing</span>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between pl-1">
+                      <span className="text-white/60">WHATSAPP_VERIFY_TOKEN:</span>
+                      <span>
+                        {diagData.whatsAppState.verifyTokenExists ? (
+                          <span className="text-emerald-400 font-bold">✔ Set ({diagData.whatsAppState.maskedVerifyToken})</span>
+                        ) : (
+                          <span className="text-amber-400 font-bold">⚠ Not Set</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-2 rounded bg-white/[0.02] border border-white/5 text-[9px] text-[#8c90a1]">
                   <span className="text-white font-bold block mb-0.5">Status Statement:</span>
                   {diagData.connectionTest.status}
