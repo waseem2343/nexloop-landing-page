@@ -16,6 +16,7 @@ import {
   Server,
   Activity
 } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -24,6 +25,7 @@ export default function AdminLayout() {
   const [dbHealthy, setDbHealthy] = useState<boolean | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   // Highlight active menu item
   const isActive = (path: string) => {
@@ -71,10 +73,13 @@ export default function AdminLayout() {
     { label: 'AI Settings', path: '/admin/settings', icon: SettingsIcon },
   ];
 
-  const handleLogout = () => {
-    // Simple placeholder for logout architecture
-    localStorage.removeItem('nexloop_admin_token');
-    navigate('/');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   return (

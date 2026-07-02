@@ -1,8 +1,3 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -37,6 +32,8 @@ import ServiceModal from './components/ServiceModal';
 import ContactForm from './components/ContactForm';
 import AiMatrixBackground from './components/AiMatrixBackground';
 import AiChatbot from './components/AiChatbot';
+import { AuthProvider } from './hooks/useAuth';
+import { useAuth } from './hooks/useAuth';
 
 // CRM Admin Pages
 import AdminLayout from './pages/admin/AdminLayout';
@@ -706,43 +703,58 @@ export function PublicWebsite() {
   );
 }
 
-// Protected Route Gating Helper
+// Protected Route Gating Helper - uses Firebase auth instead of localStorage
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const token = localStorage.getItem('nexloop_admin_token');
-  if (!token) {
+  const { isAuthenticated, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-full border-2 border-primary-container border-t-transparent animate-spin mx-auto mb-4" />
+          <p className="text-outline-brand text-sm">Verifying credentials...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
     return <Navigate to="/admin/login" replace />;
   }
+  
   return <>{children}</>;
 }
 
 // Centralized Router Config
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public Website */}
-        <Route path="/" element={<PublicWebsite />} />
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Website */}
+          <Route path="/" element={<PublicWebsite />} />
 
-        {/* Admin Login Portal */}
-        <Route path="/admin/login" element={<AdminLogin />} />
+          {/* Admin Login Portal */}
+          <Route path="/admin/login" element={<AdminLogin />} />
 
-        {/* Admin Panel Workspace */}
-        <Route path="/admin" element={
-          <ProtectedRoute>
-            <AdminLayout />
-          </ProtectedRoute>
-        }>
-          <Route index element={<AdminDashboard />} />
-          <Route path="leads" element={<AdminLeads />} />
-          <Route path="conversations" element={<AdminConversations />} />
-          <Route path="knowledge-base" element={<AdminKnowledgeBase />} />
-          <Route path="settings" element={<AdminSettings />} />
-        </Route>
+          {/* Admin Panel Workspace */}
+          <Route path="/admin" element={
+            <ProtectedRoute>
+              <AdminLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<AdminDashboard />} />
+            <Route path="leads" element={<AdminLeads />} />
+            <Route path="conversations" element={<AdminConversations />} />
+            <Route path="knowledge-base" element={<AdminKnowledgeBase />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
 
-        {/* Catch-all Redirect */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Catch-all Redirect */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
