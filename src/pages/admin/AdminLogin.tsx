@@ -1,34 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldAlert, KeyRound, Loader2, Sparkles, LogIn, ArrowRight } from 'lucide-react';
+import { ShieldAlert, KeyRound, Loader2, Sparkles, LogIn, ArrowRight, Mail } from 'lucide-react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../firebase';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function AdminLogin() {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorText, setErrorText] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/admin');
+    }
+  }, [isAuthenticated, navigate]);
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorText('');
 
-    // Prepared for future authentication backend logic
-    setTimeout(() => {
-      // Allow any password or empty password for instant guest sandbox review!
-      localStorage.setItem('nexloop_admin_token', 'NL-Cortex-Sandbox-Active');
+    try {
+      // Firebase email/password authentication
+      await signInWithEmailAndPassword(auth, email, password);
       navigate('/admin');
+    } catch (error: any) {
+      const errorCode = error.code || '';
+      
+      let friendlyMessage = 'Authentication failed. Please try again.';
+      
+      if (errorCode === 'auth/invalid-email') {
+        friendlyMessage = 'Invalid email address';
+      } else if (errorCode === 'auth/user-disabled') {
+        friendlyMessage = 'This user account has been disabled';
+      } else if (errorCode === 'auth/user-not-found') {
+        friendlyMessage = 'No account found with this email';
+      } else if (errorCode === 'auth/wrong-password') {
+        friendlyMessage = 'Incorrect password';
+      } else if (errorCode === 'auth/too-many-requests') {
+        friendlyMessage = 'Too many failed attempts. Please try again later';
+      }
+      
+      setErrorText(friendlyMessage);
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   };
 
   const handleInstantBypass = () => {
+    // For development/sandbox: Quick bypass using environment credentials
+    const demoEmail = import.meta.env.VITE_DEMO_EMAIL || 'demo@nexloop.local';
+    const demoPassword = import.meta.env.VITE_DEMO_PASSWORD || 'demo123456';
+    
     setLoading(true);
+    setErrorText('');
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    
     setTimeout(() => {
-      localStorage.setItem('nexloop_admin_token', 'NL-Cortex-Sandbox-Active');
-      navigate('/admin');
-      setLoading(false);
-    }, 400);
+      signInWithEmailAndPassword(auth, demoEmail, demoPassword)
+        .then(() => navigate('/admin'))
+        .catch((error) => {
+          setErrorText('Sandbox bypass unavailable. Please use your Firebase credentials.');
+          console.warn('Demo login failed:', error);
+        })
+        .finally(() => setLoading(false));
+    }, 300);
   };
 
   return (
@@ -61,20 +103,36 @@ export default function AdminLogin() {
           
           <div className="flex gap-2.5 p-3.5 bg-primary-container/10 border border-primary-brand/10 text-primary-brand rounded-2xl text-[11px] leading-relaxed">
             <ShieldAlert className="w-4 h-4 shrink-0 text-primary-brand" />
-            <span>This environment supports a prepared, local-ready bypass. Click <strong>Access Admin Console</strong> or type any key to log in instantly.</span>
+            <span>Firebase authentication is active. Sign in with your Nexloop admin credentials. For sandbox testing, click <strong>Quick Demo Login</strong>.</span>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             
             <div className="space-y-1.5">
-              <label className="text-[10px] text-outline-brand uppercase tracking-wider font-mono font-bold">Administrator Credentials Key</label>
+              <label className="text-[10px] text-outline-brand uppercase tracking-wider font-mono font-bold">Email Address</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-3.5 w-4 h-4 text-outline-brand" />
+                <input 
+                  type="email" 
+                  placeholder="admin@nexloop.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full pl-11 pr-5 py-3 rounded-2xl bg-[#1c1b1b] border border-white/5 focus:border-primary-brand/35 text-xs text-white placeholder:text-outline-brand focus:outline-none focus:ring-1 focus:ring-primary-brand/10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-outline-brand uppercase tracking-wider font-mono font-bold">Password</label>
               <div className="relative">
                 <KeyRound className="absolute left-4 top-3.5 w-4 h-4 text-outline-brand" />
                 <input 
                   type="password" 
-                  placeholder="Password (type any password to enter)..."
+                  placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  required
                   className="w-full pl-11 pr-5 py-3 rounded-2xl bg-[#1c1b1b] border border-white/5 focus:border-primary-brand/35 text-xs text-white placeholder:text-outline-brand focus:outline-none focus:ring-1 focus:ring-primary-brand/10"
                 />
               </div>
@@ -90,12 +148,12 @@ export default function AdminLogin() {
               className="w-full py-3 px-5 rounded-full bg-primary-container text-xs font-bold text-white uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-primary-container/10 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogIn className="w-3.5 h-3.5" />}
-              <span>Admin Key Handshake</span>
+              <span>Sign In</span>
             </button>
 
           </form>
 
-          {/* Quick Sandbox Bypass */}
+          {/* Quick Demo Login for Sandbox */}
           <div className="pt-4 border-t border-white/5 flex flex-col items-center gap-2.5">
             <button 
               onClick={handleInstantBypass}
@@ -103,7 +161,7 @@ export default function AdminLogin() {
               disabled={loading}
               className="w-full py-2.5 px-4 rounded-full border border-white/10 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest hover:text-white hover:bg-white/5 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <span>Instant Sandbox Login Bypass</span>
+              <span>Quick Demo Login</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
