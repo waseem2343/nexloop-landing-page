@@ -1,17 +1,23 @@
 {
   "version": 2,
-  "rewrites": [
+  "builds": [
     {
-      "source": "/api/admin/:action*",
-      "destination": "/api/admin.ts?action=:action*"
+      "src": "package.json",
+      "use": "@vercel/static-build"
     },
     {
-      "source": "/api/:path*",
-      "destination": "/api/:path*.ts"
+      "src": "api/**/*.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1.ts"
     },
     {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
